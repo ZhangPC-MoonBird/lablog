@@ -21,7 +21,19 @@
 
 Python 3.11+ · PySide6 (Qt6) · SQLite (WAL) · python-markdown · python-docx · PyInstaller
 
-## 🚀 运行
+## 📥 直接使用（免安装版）
+
+**不用装 Python、不用任何环境**，下载即用：
+
+1. 到 [Releases](https://github.com/ZhangPC-MoonBird/lablog/releases) 下载 `实验助手_发布包.zip`
+2. 解压到任意位置（如 D 盘）
+3. 双击 `实验助手.exe` 即可运行
+
+> - 数据自动保存在 exe 同级的 `data/` 文件夹（数据库、图片、备份都在里面）
+> - 想备份/换电脑：直接把整个 `实验助手` 文件夹拷走即可，数据跟着走
+> - 桌面快捷方式：右键 exe → 发送到 → 桌面快捷方式
+
+## 🚀 源码运行（开发者）
 
 ```bash
 pip install -r requirements.txt
