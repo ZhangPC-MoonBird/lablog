@@ -275,6 +275,8 @@ class DayColumn(QWidget):
         title.setObjectName("cardTitle")
         datelbl = QLabel(d.strftime("%m-%d"))
         datelbl.setObjectName("muted")
+        self._title_label = title
+        self._date_label = datelbl
         self.conflict_dot = QLabel("")
         self.conflict_dot.setStyleSheet("color: #EF4444; font-size: 14px;")
         head.addWidget(title)
@@ -292,6 +294,13 @@ class DayColumn(QWidget):
         add_btn.setCursor(Qt.PointingHandCursor)
         add_btn.clicked.connect(lambda: on_add(self.date))
         lay.addWidget(add_btn)
+
+    def set_date(self, date_str: str) -> None:
+        """切换周时更新这一列的日期与标题。"""
+        self.date = date_str
+        d = datetime.strptime(date_str, "%Y-%m-%d").date()
+        self._title_label.setText(f"{_WEEKDAY_CN[d.weekday()]}")
+        self._date_label.setText(d.strftime("%m-%d"))
 
     def _index_at(self, y: float) -> int:
         for i, card in enumerate(self.cards):
@@ -516,6 +525,15 @@ class PlannerPage(QWidget):
         sunday = (datetime.strptime(monday, "%Y-%m-%d") + timedelta(days=6)).strftime("%Y-%m-%d")
         iso = datetime.strptime(monday, "%Y-%m-%d").date().isocalendar()
         self.week_label.setText(f"{iso[0]}年 第{iso[1]}周  {monday[5:]} ~ {sunday[5:]}")
+
+        # 切换周后更新每列日期（周一~周日）
+        monday_date = datetime.strptime(monday, "%Y-%m-%d").date()
+        new_cols = {}
+        for i, col in enumerate(self._columns.values()):
+            d = (monday_date + timedelta(days=i)).strftime("%Y-%m-%d")
+            col.set_date(d)
+            new_cols[d] = col
+        self._columns = new_cols
 
         self._items = weekly.list_items_range(monday, sunday)
         totals = weekly.week_totals(self._items)
