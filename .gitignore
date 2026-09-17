@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# 运行时数据（用户数据，不进仓库）
+data/
+
+# 打包产物
+build/
+dist/
+*.spec
+.data_backup_tmp/
+
+# 日志 / 临时文件
+*.log
+*.tmp
+
+# 系统 / 编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
