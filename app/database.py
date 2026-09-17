@@ -148,6 +148,22 @@ CREATE TABLE IF NOT EXISTS plan_items (
 );
 CREATE INDEX IF NOT EXISTS idx_plan_items_date ON plan_items(planned_date);
 CREATE INDEX IF NOT EXISTS idx_plan_items_week ON plan_items(weekly_plan_id);
+
+-- 实验模板（同类型实验复用，不用重写）
+CREATE TABLE IF NOT EXISTS templates (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    name               TEXT NOT NULL,
+    type               TEXT DEFAULT '',
+    goal               TEXT DEFAULT '',
+    steps              TEXT DEFAULT '',
+    duration_min       INTEGER NOT NULL DEFAULT 0,
+    priority           TEXT NOT NULL DEFAULT 'medium',
+    remind_advance_min INTEGER NOT NULL DEFAULT 0,
+    remind_on_time     INTEGER NOT NULL DEFAULT 1,
+    remind_end_min     INTEGER NOT NULL DEFAULT 0,
+    notes              TEXT DEFAULT '',
+    created_at         TEXT DEFAULT (datetime('now','localtime'))
+);
 """
 
 # 默认设置（写入 settings 表，value 为 JSON 文本）

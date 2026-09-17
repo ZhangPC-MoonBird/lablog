@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 
 from ... import config
 from ...models import experiment
+from ...models import template
 from ...utils import time_utils
 from ..components import TypeManagerDialog, make_expand_button
 
@@ -35,7 +36,7 @@ from ..components import TypeManagerDialog, make_expand_button
 class ExperimentEditDialog(QDialog):
     """新建（exp_id=None）或编辑实验。保存成功后 self.saved_id 为实验 id。"""
 
-    def __init__(self, exp_id: int | None = None, parent=None):
+    def __init__(self, exp_id: int | None = None, parent=None, template_id: int | None = None):
         super().__init__(parent)
         self.exp_id = exp_id
         self.saved_id: int | None = None
@@ -44,6 +45,8 @@ class ExperimentEditDialog(QDialog):
         self._build_ui()
         if exp_id is not None:
             self._load(experiment.get(exp_id))
+        elif template_id is not None:
+            self._load_template(template_id)
         self._recompute_end()
 
     # ------------------------------------------------------------------ 构建
@@ -52,6 +55,14 @@ class ExperimentEditDialog(QDialog):
         form = QFormLayout()
         form.setSpacing(10)
         form.setLabelAlignment(Qt.AlignRight)
+
+        # 从模板载入（可选）：选了自动填充类型/目标/步骤/提醒等
+        self.template_combo = QComboBox()
+        self.template_combo.addItem("（不使用模板）", None)
+        for t in template.list_templates():
+            self.template_combo.addItem(t["name"], t["id"])
+        self.template_combo.currentIndexChanged.connect(self._on_template_selected)
+        form.addRow("从模板载入", self.template_combo)
 
         self.title_edit = QLineEdit()
         self.title_edit.setPlaceholderText("必填，如：合成质粒")
@@ -221,6 +232,42 @@ class ExperimentEditDialog(QDialog):
         v.addLayout(row)
         v.addWidget(edit)
         return wrap
+
+    def _load_template(self, template_id: int) -> None:
+        """从模板新建：构造时预填表单。"""
+        t = template.get(template_id)
+        if t is not None:
+            self._fill_from_template(t)
+
+    def _on_template_selected(self, _idx: int) -> None:
+        """下拉选中模板后一键填充表单。"""
+        tpl_id = self.template_combo.currentData()
+        if tpl_id is None:
+            return
+        t = template.get(tpl_id)
+        if t is not None:
+            self._fill_from_template(t)
+
+    def _fill_from_template(self, t: dict) -> None:
+        self.type_combo.setCurrentText(t["type"] or "")
+        self.goal_edit.setText(t["goal"] or "")
+        self.steps_edit.setPlainText(t["steps"] or "")
+        self.notes_edit.setPlainText(t["notes"] or "")
+        dur = int(t["duration_min"] or 0)
+        self.hour_spin.setValue(dur // 60)
+        self.min_spin.setValue(dur % 60)
+        idx_p = self.priority_combo.findData(t["priority"])
+        self.priority_combo.setCurrentIndex(idx_p if idx_p >= 0 else 1)
+        adv = int(t["remind_advance_min"] or 0)
+        self.remind_check.setChecked(bool(adv or t["remind_on_time"] or t["remind_end_min"]))
+        self.advance_spin.setValue(adv if adv > 0 else 10)
+        self.on_time_check.setChecked(bool(t["remind_on_time"]))
+        end_min = int(t["remind_end_min"] or 0)
+        self.end_check.setChecked(end_min > 0)
+        self.end_min_spin.setValue(end_min if end_min > 0 else 10)
+        if not self.title_edit.text().strip():
+            self.title_edit.setText(t["name"])
+        self._recompute_end()
 
     def _reload_types(self) -> None:
         """重新填充类型下拉（保留当前选择）。"""

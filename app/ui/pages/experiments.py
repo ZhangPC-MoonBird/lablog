@@ -143,6 +143,10 @@ class ExperimentsPage(QWidget):
         new_btn.setObjectName("primaryBtn")
         new_btn.setCursor(Qt.PointingHandCursor)
         new_btn.clicked.connect(self.new_experiment.emit)
+        create_tpl_btn = QPushButton("创建模板")
+        create_tpl_btn.setCursor(Qt.PointingHandCursor)
+        create_tpl_btn.setToolTip("把常用实验的目标/步骤/提醒保存成模板")
+        create_tpl_btn.clicked.connect(self._create_template)
         manage_type_btn = QPushButton("管理类型")
         manage_type_btn.setCursor(Qt.PointingHandCursor)
         manage_type_btn.clicked.connect(self._manage_types)
@@ -156,6 +160,7 @@ class ExperimentsPage(QWidget):
         top.addSpacing(6)
         top.addWidget(self.list_btn)
         top.addWidget(self.board_btn)
+        top.addWidget(create_tpl_btn)
         top.addWidget(new_btn)
         outer.addLayout(top)
 
@@ -181,9 +186,9 @@ class ExperimentsPage(QWidget):
     # ------------------------------------------------------------------ 构建
 
     def _build_table(self) -> QTableWidget:
-        table = QTableWidget(0, 8)
+        table = QTableWidget(0, 9)
         table.setHorizontalHeaderLabels(
-            ["标题", "类型", "计划开始", "预计耗时", "预计结束", "状态", "优先级", "标签"]
+            ["#", "标题", "类型", "计划开始", "预计耗时", "预计结束", "状态", "优先级", "标签"]
         )
         table.setSelectionBehavior(QTableWidget.SelectRows)
         table.setSelectionMode(QTableWidget.SingleSelection)
@@ -191,14 +196,10 @@ class ExperimentsPage(QWidget):
         table.verticalHeader().setVisible(False)
         table.verticalHeader().setDefaultSectionSize(40)
         header = table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(7, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        for col in range(2, 9):
+            header.setSectionResizeMode(col, QHeaderView.ResizeToContents)
         table.cellDoubleClicked.connect(lambda r, c: self._open_row(r))
         table.setContextMenuPolicy(Qt.CustomContextMenu)
         table.customContextMenuRequested.connect(self._show_menu)
@@ -273,20 +274,40 @@ class ExperimentsPage(QWidget):
         for exp in self._exps:
             r = self.list_table.rowCount()
             self.list_table.insertRow(r)
-            self._set(r, 0, exp["title"])
-            self._set(r, 1, exp["type"] or "—")
-            self._set(r, 2, (exp["planned_start"] or "—")[5:16].replace("-", "/"))
-            self._set(r, 3, time_utils.format_duration(exp["duration_min"]) or "—")
-            self._set(r, 4, (exp["planned_end"] or "—")[5:16].replace("-", "/"))
+            self._set(r, 0, str(r + 1))  # 序号
+            self.list_table.setCellWidget(r, 1, self._title_cell(exp))  # 色块 + 标题
+            self._set(r, 2, exp["type"] or "—")
+            self._set(r, 3, (exp["planned_start"] or "—")[5:16].replace("-", "/"))
+            self._set(r, 4, time_utils.format_duration(exp["duration_min"]) or "—")
+            self._set(r, 5, (exp["planned_end"] or "—")[5:16].replace("-", "/"))
             self.list_table.setCellWidget(
-                r, 5, badge_cell(experiment.STATUS_LABELS.get(exp["status"], exp["status"]),
+                r, 6, badge_cell(experiment.STATUS_LABELS.get(exp["status"], exp["status"]),
                                  experiment.STATUS_COLORS.get(exp["status"], "subtext"))
             )
             self.list_table.setCellWidget(
-                r, 6, badge_cell(experiment.PRIORITY_LABELS.get(exp["priority"], exp["priority"]),
+                r, 7, badge_cell(experiment.PRIORITY_LABELS.get(exp["priority"], exp["priority"]),
                                  experiment.PRIORITY_COLORS.get(exp["priority"], "subtext"))
             )
-            self._set(r, 7, experiment.tags_to_str(exp))
+            self._set(r, 8, experiment.tags_to_str(exp))
+
+    def _title_cell(self, exp: dict) -> QWidget:
+        """标题单元格：状态色块 + 标题。"""
+        from .. import theme
+
+        wrap = QWidget()
+        h = QHBoxLayout(wrap)
+        h.setContentsMargins(6, 4, 6, 4)
+        h.setSpacing(8)
+        color = theme.current().get(
+            experiment.STATUS_COLORS.get(exp["status"], "subtext"), "#9CA3AF")
+        block = QLabel()
+        block.setFixedSize(12, 12)
+        block.setStyleSheet(f"background: {color}; border-radius: 3px;")
+        h.addWidget(block)
+        title = QLabel(exp["title"])
+        h.addWidget(title)
+        h.addStretch()
+        return wrap
 
     def _set(self, r: int, c: int, text: str) -> None:
         item = QTableWidgetItem(text)
@@ -318,6 +339,13 @@ class ExperimentsPage(QWidget):
         dlg = TypeManagerDialog(self)
         if dlg.exec() == QDialog.Accepted:
             self.refresh()
+
+    # ------------------------------------------------------------------ 模板
+
+    def _create_template(self) -> None:
+        from .template_edit import TemplateEditDialog
+
+        TemplateEditDialog(parent=self.window()).exec()
 
     def _selected_id(self) -> int | None:
         row = self.list_table.currentRow()
