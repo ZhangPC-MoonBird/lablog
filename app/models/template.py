@@ -35,5 +35,18 @@ def create(data: dict) -> int:
     )
 
 
+def update(template_id: int, data: dict) -> None:
+    d = {f: data.get(f) for f in FIELDS}
+    d["name"] = (d.get("name") or "").strip()
+    d["priority"] = d.get("priority") or "medium"
+    d["duration_min"] = int(d.get("duration_min") or 0)
+    d["remind_advance_min"] = int(d.get("remind_advance_min") or 0)
+    d["remind_on_time"] = int(d.get("remind_on_time") or 0)
+    d["remind_end_min"] = int(d.get("remind_end_min") or 0)
+    set_clause = ", ".join(f"{f} = ?" for f in FIELDS)
+    execute(f"UPDATE templates SET {set_clause} WHERE id = ?",
+            [d[f] for f in FIELDS] + [template_id])
+
+
 def delete(template_id: int) -> None:
     execute("DELETE FROM templates WHERE id = ?", (template_id,))

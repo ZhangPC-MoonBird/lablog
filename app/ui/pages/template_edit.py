@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -29,13 +30,38 @@ from ..components import make_expand_button
 
 
 class TemplateEditDialog(QDialog):
-    """新建模板（填写后保存到 templates 表）。"""
+    """新建 / 编辑模板（填写后保存到 templates 表）。"""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, template_id=None):
         super().__init__(parent)
-        self.setWindowTitle("创建模板")
+        self.template_id = template_id
+        self.setWindowTitle("编辑模板" if template_id else "创建模板")
         self.setMinimumWidth(560)
         self._build_ui()
+        if template_id is not None:
+            self._load(template_id)
+
+    def _load(self, template_id: int) -> None:
+        t = template.get(template_id)
+        if t is None:
+            return
+        self.name_edit.setText(t["name"] or "")
+        self.type_combo.setCurrentText(t["type"] or "")
+        idx = self.priority_combo.findData(t["priority"])
+        self.priority_combo.setCurrentIndex(idx if idx >= 0 else 1)
+        self.goal_edit.setText(t["goal"] or "")
+        self.steps_edit.setPlainText(t["steps"] or "")
+        dur = int(t["duration_min"] or 0)
+        self.hour_spin.setValue(dur // 60)
+        self.min_spin.setValue(dur % 60)
+        adv = int(t["remind_advance_min"] or 0)
+        self.remind_check.setChecked(bool(adv or t["remind_on_time"] or t["remind_end_min"]))
+        self.advance_spin.setValue(adv if adv > 0 else 10)
+        self.on_time_check.setChecked(bool(t["remind_on_time"]))
+        end_min = int(t["remind_end_min"] or 0)
+        self.end_check.setChecked(end_min > 0)
+        self.end_min_spin.setValue(end_min if end_min > 0 else 10)
+        self.notes_edit.setPlainText(t["notes"] or "")
 
     def _build_ui(self) -> None:
         form = QFormLayout()
@@ -154,7 +180,7 @@ class TemplateEditDialog(QDialog):
             QMessageBox.warning(self, config.APP_NAME, "请填写模板名称。")
             return
         remind_on = self.remind_check.isChecked()
-        template.create({
+        data = {
             "name": name,
             "type": self.type_combo.currentText().strip(),
             "priority": self.priority_combo.currentData(),
@@ -165,5 +191,78 @@ class TemplateEditDialog(QDialog):
             "remind_on_time": int(self.on_time_check.isChecked()) if remind_on else 0,
             "remind_end_min": self.end_min_spin.value() if (remind_on and self.end_check.isChecked()) else 0,
             "notes": self.notes_edit.toPlainText(),
-        })
+        }
+        if self.template_id is None:
+            template.create(data)
+        else:
+            template.update(self.template_id, data)
         super().accept()
+
+
+class TemplateManagerDialog(QDialog):
+    """管理模板：列出所有模板，可删除。"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("管理模板")
+        self.setMinimumSize(420, 360)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(18, 16, 18, 16)
+        lay.setSpacing(10)
+
+        self.list = QListWidget()
+        self.list.itemDoubleClicked.connect(lambda _: self._edit_selected())
+        lay.addWidget(self.list, 1)
+
+        btn = QHBoxLayout()
+        add_btn = QPushButton("创建")
+        add_btn.setObjectName("primaryBtn")
+        add_btn.clicked.connect(self._create)
+        edit_btn = QPushButton("编辑")
+        edit_btn.clicked.connect(self._edit_selected)
+        del_btn = QPushButton("删除")
+        del_btn.clicked.connect(self._delete_selected)
+        close_btn = QPushButton("关闭")
+        close_btn.clicked.connect(self.accept)
+        for b in (add_btn, edit_btn, del_btn, close_btn):
+            b.setCursor(Qt.PointingHandCursor)
+        btn.addStretch()
+        btn.addWidget(add_btn)
+        btn.addWidget(edit_btn)
+        btn.addWidget(del_btn)
+        btn.addWidget(close_btn)
+        lay.addLayout(btn)
+
+        self._reload()
+
+    def _reload(self) -> None:
+        self.list.clear()
+        for t in template.list_templates():
+            self.list.addItem(f"{t['name']}　（{t['type'] or '无类型'}）")
+
+    def _create(self) -> None:
+        TemplateEditDialog(self).exec()
+        self._reload()
+
+    def _selected(self):
+        row = self.list.currentRow()
+        tpls = template.list_templates()
+        if row < 0 or row >= len(tpls):
+            return None
+        return tpls[row]
+
+    def _edit_selected(self) -> None:
+        t = self._selected()
+        if t is None:
+            return
+        TemplateEditDialog(self, template_id=t["id"]).exec()
+        self._reload()
+
+    def _delete_selected(self) -> None:
+        t = self._selected()
+        if t is None:
+            return
+        if QMessageBox.question(self, config.APP_NAME,
+                                f"删除模板「{t['name']}」？") == QMessageBox.Yes:
+            template.delete(t["id"])
+            self._reload()

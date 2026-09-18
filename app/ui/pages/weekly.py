@@ -316,6 +316,10 @@ class WeeklyReviewPage(QWidget):
             experiment.STATUS_LABELS.get(exp["status"], exp["status"]),
             experiment.STATUS_COLORS.get(exp["status"], "subtext")))
         head.addStretch()
+        view_btn = QPushButton("查看详情")
+        view_btn.setCursor(Qt.PointingHandCursor)
+        view_btn.clicked.connect(lambda _=False, eid=exp["id"]: self.open_experiment.emit(eid))
+        head.addWidget(view_btn)
         v.addLayout(head)
 
         concl = (exp.get("conclusion") or "").strip()

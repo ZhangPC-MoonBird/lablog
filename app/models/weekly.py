@@ -215,6 +215,26 @@ def create_from_template(to_week_start: str) -> list[int]:
     return created
 
 
+def convert_experiment_to_plan(exp_id: int, target_date: str) -> int | None:
+    """把实验转成指定日期（如今天）的规划项。"""
+    exp = experiment.get(exp_id)
+    if exp is None:
+        return None
+    time_part = (exp["planned_start"] or "")[11:] or "09:00"
+    week_start = time_utils.monday_of(
+        datetime.strptime(target_date, "%Y-%m-%d").date()).strftime("%Y-%m-%d")
+    return create_item({
+        "week_start": week_start,
+        "title": exp["title"],
+        "type": exp["type"],
+        "planned_date": target_date,
+        "planned_start": time_part,
+        "duration_min": int(exp["duration_min"] or 0),
+        "priority": exp["priority"],
+        "notes": exp["notes"],
+    })
+
+
 def convert_to_experiment(item_id: int) -> int | None:
     """一键转正式实验：创建 experiments 行并自动武装提醒，回写 linked_experiment_id。"""
     item = get_item(item_id)
@@ -223,12 +243,14 @@ def convert_to_experiment(item_id: int) -> int | None:
     planned_start = f"{item['planned_date']} {item['planned_start'] or '09:00'}"
     duration = int(item["duration_min"] or 0)
     advance = int(get_setting("remind_default_advance_min", 10) or 0)
+    on_time = int(bool(get_setting("remind_default_on_time", True)))
     exp_id = experiment.create({
         "title": item["title"], "type": item["type"],
         "planned_start": planned_start, "duration_min": duration,
         "priority": item["priority"], "notes": item["notes"],
         "status": "planned",
-        "remind_enabled": 1, "remind_advance_min": advance, "remind_on_time": 1,
+        "remind_enabled": 1, "remind_advance_min": advance, "remind_on_time": on_time,
+        "remind_end_min": 0,
     })
     execute("UPDATE experiments SET source = 'plan' WHERE id = ?", (exp_id,))
     execute(

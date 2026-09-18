@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLayout,
+    QListWidget,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
@@ -589,46 +590,86 @@ class ClickableImageLabel(QLabel):
 
 
 class TypeManagerDialog(QDialog):
-    """管理实验类型清单：每行一个类型，可增删，保存到 settings。"""
+    """管理实验类型清单：列表形式，每项独立，可增删改。"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("管理实验类型")
-        self.setMinimumWidth(380)
+        self.setMinimumSize(380, 360)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(18, 16, 18, 16)
         lay.setSpacing(10)
 
-        tip = QLabel("每行一个实验类型（任务种类），可自由增删改。")
-        tip.setObjectName("muted")
-        tip.setWordWrap(True)
-        lay.addWidget(tip)
-
-        from ..models import experiment
-
-        self.edit = QPlainTextEdit()
-        self.edit.setPlaceholderText("例如：\n合成质粒\n细胞培养\n显微镜观察")
-        self.edit.setPlainText("\n".join(experiment.get_types()))
-        self.edit.setFixedHeight(220)
-        lay.addWidget(self.edit)
+        self.list = QListWidget()
+        self.list.itemDoubleClicked.connect(lambda _: self._edit())
+        lay.addWidget(self.list, 1)
 
         row = QHBoxLayout()
+        add_btn = QPushButton("添加")
+        add_btn.setObjectName("primaryBtn")
+        add_btn.clicked.connect(self._add)
+        edit_btn = QPushButton("编辑")
+        edit_btn.clicked.connect(self._edit)
+        del_btn = QPushButton("删除")
+        del_btn.clicked.connect(self._delete)
+        close_btn = QPushButton("关闭")
+        close_btn.clicked.connect(self.accept)
+        for b in (add_btn, edit_btn, del_btn, close_btn):
+            b.setCursor(Qt.PointingHandCursor)
         row.addStretch()
-        cancel = QPushButton("取消")
-        cancel.clicked.connect(self.reject)
-        save = QPushButton("保存")
-        save.setDefault(True)
-        save.clicked.connect(self.accept)
-        row.addWidget(cancel)
-        row.addWidget(save)
+        row.addWidget(add_btn)
+        row.addWidget(edit_btn)
+        row.addWidget(del_btn)
+        row.addWidget(close_btn)
         lay.addLayout(row)
 
-    def accept(self) -> None:
+        self._reload()
+
+    def _reload(self) -> None:
         from ..models import experiment
 
-        types = [t.strip() for t in self.edit.toPlainText().splitlines() if t.strip()]
+        self.list.clear()
+        for t in experiment.get_types():
+            self.list.addItem(t)
+
+    def _add(self) -> None:
+        from PySide6.QtWidgets import QInputDialog
+
+        name, ok = QInputDialog.getText(self, "添加类型", "类型名称：")
+        if ok and name.strip():
+            from ..models import experiment
+
+            types = experiment.get_types()
+            types.append(name.strip())
+            experiment.set_types(types)
+            self._reload()
+
+    def _edit(self) -> None:
+        row = self.list.currentRow()
+        if row < 0:
+            return
+        from PySide6.QtWidgets import QInputDialog
+
+        name, ok = QInputDialog.getText(
+            self, "编辑类型", "类型名称：", text=self.list.item(row).text())
+        if ok and name.strip():
+            from ..models import experiment
+
+            types = experiment.get_types()
+            types[row] = name.strip()
+            experiment.set_types(types)
+            self._reload()
+
+    def _delete(self) -> None:
+        row = self.list.currentRow()
+        if row < 0:
+            return
+        from ..models import experiment
+
+        types = experiment.get_types()
+        del types[row]
         experiment.set_types(types)
-        super().accept()
+        self._reload()
 
 
 class ImagePreviewDialog(QDialog):

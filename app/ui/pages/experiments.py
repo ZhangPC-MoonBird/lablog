@@ -143,10 +143,10 @@ class ExperimentsPage(QWidget):
         new_btn.setObjectName("primaryBtn")
         new_btn.setCursor(Qt.PointingHandCursor)
         new_btn.clicked.connect(self.new_experiment.emit)
-        create_tpl_btn = QPushButton("创建模板")
-        create_tpl_btn.setCursor(Qt.PointingHandCursor)
-        create_tpl_btn.setToolTip("把常用实验的目标/步骤/提醒保存成模板")
-        create_tpl_btn.clicked.connect(self._create_template)
+        manage_tpl_btn = QPushButton("管理模板")
+        manage_tpl_btn.setCursor(Qt.PointingHandCursor)
+        manage_tpl_btn.setToolTip("创建/编辑/删除实验模板")
+        manage_tpl_btn.clicked.connect(self._manage_templates)
         manage_type_btn = QPushButton("管理类型")
         manage_type_btn.setCursor(Qt.PointingHandCursor)
         manage_type_btn.clicked.connect(self._manage_types)
@@ -160,7 +160,7 @@ class ExperimentsPage(QWidget):
         top.addSpacing(6)
         top.addWidget(self.list_btn)
         top.addWidget(self.board_btn)
-        top.addWidget(create_tpl_btn)
+        top.addWidget(manage_tpl_btn)
         top.addWidget(new_btn)
         outer.addLayout(top)
 
@@ -342,10 +342,10 @@ class ExperimentsPage(QWidget):
 
     # ------------------------------------------------------------------ 模板
 
-    def _create_template(self) -> None:
-        from .template_edit import TemplateEditDialog
+    def _manage_templates(self) -> None:
+        from .template_edit import TemplateManagerDialog
 
-        TemplateEditDialog(parent=self.window()).exec()
+        TemplateManagerDialog(parent=self.window()).exec()
 
     def _selected_id(self) -> int | None:
         row = self.list_table.currentRow()
@@ -363,6 +363,7 @@ class ExperimentsPage(QWidget):
             return
         menu = QMenu(self)
         act_start = menu.addAction("开始实验")
+        act_plan = menu.addAction("转为今日规划")
         act_view = menu.addAction("查看详情")
         act_edit = menu.addAction("编辑")
         act_del = menu.addAction("删除")
@@ -371,6 +372,14 @@ class ExperimentsPage(QWidget):
         self.list_table.clearSelection()
         if chosen == act_start:
             experiment.mark_started(exp_id)
+            self.refresh()
+        elif chosen == act_plan:
+            from datetime import datetime
+
+            from ...models import weekly
+
+            today = datetime.now().strftime("%Y-%m-%d")
+            weekly.convert_experiment_to_plan(exp_id, today)
             self.refresh()
         elif chosen == act_view:
             self.open_experiment.emit(exp_id)

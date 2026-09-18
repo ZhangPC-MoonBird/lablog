@@ -191,11 +191,21 @@ QTableView, QTableWidget {
     alternate-background-color: __HOVER__;
     selection-background-color: __PRIMARY_TINT__; selection-color: __TEXT__;
 }
+QTableView::item:selected, QTableWidget::item:selected {
+    background: __PRIMARY_TINT__; color: __TEXT__;
+}
 QHeaderView::section {
     background: __HOVER__; color: __SUBTEXT__; border: none;
     border-bottom: 1px solid __BORDER__; padding: 6px 8px;
 }
 QTableCornerButton::section { background: __HOVER__; border: none; }
+
+/* 列表：选中整行浅色填充 */
+QListWidget, QListWidget::item { background: __CARD__; color: __TEXT__; }
+QListWidget { border: 1px solid __BORDER__; border-radius: 6px; }
+QListWidget::item { padding: 7px 10px; border-bottom: 1px solid __BORDER__; }
+QListWidget::item:selected { background: __PRIMARY_TINT__; color: __TEXT__; }
+QListWidget::item:hover { background: __HOVER__; }
 
 /* 滚动区域 */
 QScrollArea { background: transparent; border: none; }
