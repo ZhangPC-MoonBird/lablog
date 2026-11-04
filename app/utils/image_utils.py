@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize, Qt, QUrl
 from PySide6.QtGui import QImage, QImageReader, QPixmap
 
 from .. import config
@@ -63,6 +63,11 @@ def absolute_path(relative_path: str) -> Path:
     return config.DATA_DIR / relative_path
 
 
+def exists(relative_path: str) -> bool:
+    """判断某张图片文件是否存在。"""
+    return absolute_path(relative_path).exists()
+
+
 def load_pixmap(relative_path: str, max_edge: int = 0) -> QPixmap | None:
     """加载图片为 QPixmap；max_edge > 0 时按最长边缩放（用 QImageReader 降低内存占用）。"""
     p = absolute_path(relative_path)
@@ -79,3 +84,26 @@ def load_pixmap(relative_path: str, max_edge: int = 0) -> QPixmap | None:
     if img.isNull():
         return None
     return QPixmap.fromImage(img)
+
+
+def inline_image_html(relative_path: str, max_edge: int = 600) -> str:
+    """生成可内嵌 QLabel 富文本的 <img> 标签（绝对 file:// 路径 + 限制尺寸）。
+
+    记录正文以 Markdown 存储，图片链接形如 images/xxx.jpg。此函数把该链接
+    渲染为带绝对路径的 HTML 图片，让图片真正显示在记录正文中（文件缺失则返回空串）。
+    """
+    p = absolute_path(relative_path)
+    if not p.exists():
+        return ""
+    reader = QImageReader(str(p))
+    reader.setAutoTransform(True)
+    s = reader.size()
+    size_attr = ""
+    if s.isValid():
+        w, h = s.width(), s.height()
+        if max(w, h) > max_edge:
+            scale = max_edge / max(w, h)
+            w, h = max(1, int(w * scale)), max(1, int(h * scale))
+        size_attr = f' width="{w}" height="{h}"'
+    url = QUrl.fromLocalFile(str(p)).toString()
+    return f'<img src="{url}"{size_attr} />'

@@ -28,6 +28,20 @@ def update_record(record_id: int, content: str, record_time: str) -> None:
     )
 
 
+def sync_record_images(record_id: int, experiment_id: int, paths: list[str]) -> None:
+    """按正文中的图片链接同步 record_images：新增缺失项，删除已移除项（含文件）。"""
+    keep = {p for p in paths if p}
+    existing = list_images_for_record(record_id)
+    known = {img["path"] for img in existing}
+    for img in existing:
+        if img["path"] not in keep:
+            image_utils.delete_image(img["path"])
+            execute("DELETE FROM record_images WHERE id = ?", (img["id"],))
+    for path in keep:
+        if path not in known and image_utils.exists(path):
+            add_image(record_id, experiment_id, path)
+
+
 def delete_record(record_id: int) -> None:
     """删除记录并清理其图片文件（record_images 经外键级联删除）。"""
     for img in list_images_for_record(record_id):
@@ -64,6 +78,13 @@ def list_images(experiment_id: int) -> list[dict]:
 def count_images(experiment_id: int) -> int:
     row = fetch_one(
         "SELECT COUNT(*) c FROM record_images WHERE experiment_id = ?", (experiment_id,)
+    )
+    return row["c"] if row else 0
+
+
+def count_records(experiment_id: int) -> int:
+    row = fetch_one(
+        "SELECT COUNT(*) c FROM experiment_records WHERE experiment_id = ?", (experiment_id,)
     )
     return row["c"] if row else 0
 

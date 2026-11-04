@@ -70,7 +70,7 @@ def main() -> int:
 
     # ---- 1. 周汇总统计 ----
     e_done = experiment.create({"title": "完成实验", "planned_start": f"{monday} 09:00", "duration_min": 60, "status": "done"})
-    experiment.create({"title": "进行中", "planned_start": "2026-09-20 10:00", "duration_min": 60, "status": "running"})
+    experiment.create({"title": "进行中", "planned_start": "2099-09-20 10:00", "duration_min": 60, "status": "running"})
     experiment.create({"title": "失败", "planned_start": f"{monday} 11:00", "duration_min": 60, "status": "failed"})
     experiment.create({"title": "超时", "planned_start": f"{monday} 08:00", "duration_min": 30, "status": "planned"})
     rec_id = record.create_record(e_done, "一条记录", f"{monday} 12:00:00")

@@ -50,11 +50,19 @@ def minutes_to_time(total: int) -> str:
 
 
 def format_duration(minutes: int) -> str:
-    """分钟数 -> 人类可读时长，如 '3小时' / '1小时30分' / '45分'。"""
+    """分钟数 -> 人类可读时长，如 '1天2小时' / '3小时' / '45分'。"""
     minutes = int(minutes or 0)
     if minutes < 0:
         return ""
-    h, m = divmod(minutes, 60)
+    days, rem = divmod(minutes, 24 * 60)
+    h, m = divmod(rem, 60)
+    if days:
+        parts = [f"{days}天"]
+        if h:
+            parts.append(f"{h}小时")
+        if m:
+            parts.append(f"{m}分")
+        return "".join(parts)
     if h and m:
         return f"{h}小时{m}分"
     if h:

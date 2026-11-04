@@ -42,6 +42,7 @@ from .pages.dashboard import DashboardPage
 from .pages.experiment_detail import ExperimentDetailPage
 from .pages.experiment_edit import ExperimentEditDialog
 from .pages.experiments import ExperimentsPage
+from .pages.overview import OverviewPage
 from .pages.planner import PlannerPage
 from .pages.settings_page import SettingsPage
 from .pages.weekly import WeeklyReviewPage
@@ -51,6 +52,7 @@ log = logging.getLogger(__name__)
 NAV_ITEMS = (
     ("dashboard", "仪表盘", "home", "今日概览与每日记录"),
     ("experiments", "实验内容", "flask", "新建、编辑、删除实验，自动计算结束时间与提醒"),
+    ("overview", "实验总览", "clock", "所有实验与时间，按日期汇总查看"),
     ("planner", "实验规划", "calendar", "下周七天规划视图、拖拽排程、一键转实验（M4）"),
     ("weekly", "周整理", "doc", "自动汇总本周工作，导出 Markdown / HTML（M4）"),
     ("settings", "设置", "settings", "主题、天气、备份与提醒默认值（M5）"),
@@ -292,7 +294,7 @@ class MainWindow(QMainWindow):
             lay.addWidget(btn)
 
         lay.addStretch()
-        version = QLabel(f"v{config.APP_VERSION} · M2")
+        version = QLabel(f"v{config.APP_VERSION} · 实验总览")
         version.setObjectName("muted")
         version.setAlignment(Qt.AlignCenter)
         lay.addWidget(version)
@@ -321,6 +323,11 @@ class MainWindow(QMainWindow):
         exp_page.edit_experiment.connect(self.open_edit)
         self._pages["experiments"] = exp_page
         self.stack.addWidget(exp_page)
+
+        overview_page = OverviewPage()
+        overview_page.open_experiment.connect(self.open_experiment)
+        self._pages["overview"] = overview_page
+        self.stack.addWidget(overview_page)
 
         self._pages["planner"] = PlannerPage()
         self.stack.addWidget(self._pages["planner"])
@@ -444,6 +451,7 @@ class MainWindow(QMainWindow):
             self._detail_page.back_requested.connect(self._back_from_detail)
             self._detail_page.edit_requested.connect(self.open_edit)
             self._detail_page.deleted.connect(self._on_detail_deleted)
+            self._detail_page.open_requested.connect(self.open_experiment)
             self.stack.addWidget(self._detail_page)
         self._detail_page.load(exp_id)
         for b in self._nav_buttons.values():
@@ -457,12 +465,19 @@ class MainWindow(QMainWindow):
         """打开新建 / 编辑实验对话框。"""
         dlg = ExperimentEditDialog(exp_id, self)
         if dlg.exec() == QDialog.Accepted:
-            self._pages["experiments"].refresh()
+            self._refresh_data_pages()
             if self._detail_page is not None and self._detail_page.exp_id is not None:
                 self._detail_page.load(self._detail_page.exp_id)
 
+    def _refresh_data_pages(self) -> None:
+        for key in ("experiments", "overview", "dashboard", "planner", "weekly"):
+            page = self._pages.get(key)
+            refresh = getattr(page, "refresh", None)
+            if callable(refresh):
+                refresh()
+
     def _on_detail_deleted(self, _exp_id: int) -> None:
-        self._pages["experiments"].refresh()
+        self._refresh_data_pages()
         self.switch_page("experiments")
 
     # ------------------------------------------------------------------ 提醒
@@ -541,8 +556,8 @@ class MainWindow(QMainWindow):
         dash = self._pages.get("dashboard")
         if dash is not None and callable(getattr(dash, "refresh", None)):
             dash.refresh()
-        # 4. 周整理 + 实验规划刷新
-        for key in ("weekly", "planner"):
+        # 4. 周整理 + 实验规划 + 实验总览刷新
+        for key in ("weekly", "planner", "overview", "experiments"):
             page = self._pages.get(key)
             if page is not None and callable(getattr(page, "refresh", None)):
                 page.refresh()

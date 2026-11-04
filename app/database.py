@@ -13,7 +13,7 @@ from typing import Any, Sequence
 
 from . import config
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # ---------------------------------------------------------------------------
 # 表结构（11 张表，一次建全，避免后续里程碑做迁移）
@@ -52,7 +52,9 @@ CREATE TABLE IF NOT EXISTS experiments (
     remind_advance_min INTEGER NOT NULL DEFAULT 0,  -- 0 = 不提前提醒
     remind_on_time     INTEGER NOT NULL DEFAULT 1,  -- 到点提醒
     remind_end_min     INTEGER NOT NULL DEFAULT 0,  -- 结束前 N 分钟提醒（0 = 不提醒）
-    source             TEXT NOT NULL DEFAULT 'manual',  -- manual / plan（来自规划页）
+    source             TEXT NOT NULL DEFAULT 'manual',  -- manual / plan / followup
+    parent_id          INTEGER REFERENCES experiments(id) ON DELETE CASCADE,  -- 跟随实验所属的主实验
+    follow_offset_min  INTEGER NOT NULL DEFAULT 0,  -- 主实验结束后多少分钟开始跟随
     created_at         TEXT DEFAULT (datetime('now','localtime')),
     updated_at         TEXT DEFAULT (datetime('now','localtime'))
 );
@@ -143,6 +145,16 @@ CREATE TABLE IF NOT EXISTS plan_items (
     sort_order           INTEGER NOT NULL DEFAULT 0,  -- 同一天内的拖拽排序
     linked_experiment_id INTEGER REFERENCES experiments(id) ON DELETE SET NULL,
     notes                TEXT DEFAULT '',
+    -- 以下字段用于“规划项按实验填写”：转实验时原样带入，不用重写
+    is_experiment        INTEGER NOT NULL DEFAULT 0,
+    goal                 TEXT DEFAULT '',
+    steps                TEXT DEFAULT '',
+    tags                 TEXT NOT NULL DEFAULT '[]',
+    remind_enabled       INTEGER NOT NULL DEFAULT 0,
+    remind_advance_min   INTEGER NOT NULL DEFAULT 0,
+    remind_on_time       INTEGER NOT NULL DEFAULT 1,
+    remind_end_min       INTEGER NOT NULL DEFAULT 0,
+    followups            TEXT NOT NULL DEFAULT '[]',  -- JSON: 跟随实验定义
     created_at           TEXT DEFAULT (datetime('now','localtime')),
     updated_at           TEXT DEFAULT (datetime('now','localtime'))
 );
@@ -162,6 +174,7 @@ CREATE TABLE IF NOT EXISTS templates (
     remind_on_time     INTEGER NOT NULL DEFAULT 1,
     remind_end_min     INTEGER NOT NULL DEFAULT 0,
     notes              TEXT DEFAULT '',
+    followups          TEXT NOT NULL DEFAULT '[]',  -- JSON: 跟随实验定义
     created_at         TEXT DEFAULT (datetime('now','localtime'))
 );
 """
@@ -205,14 +218,36 @@ def db():
 
 def _migrate(conn) -> None:
     """对旧库做列级迁移（幂等，可重复执行）。"""
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(experiments)").fetchall()}
-    if "conclusion" not in cols:
-        conn.execute("ALTER TABLE experiments ADD COLUMN conclusion TEXT DEFAULT ''")
-    if "remind_end_min" not in cols:
-        conn.execute("ALTER TABLE experiments ADD COLUMN remind_end_min INTEGER NOT NULL DEFAULT 0")
-    rcols = {r["name"] for r in conn.execute("PRAGMA table_info(reminder_log)").fetchall()}
-    if "confirmed" not in rcols:
-        conn.execute("ALTER TABLE reminder_log ADD COLUMN confirmed INTEGER NOT NULL DEFAULT 0")
+    def add_columns(table: str, columns: dict[str, str]) -> None:
+        existing = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        for name, ddl in columns.items():
+            if name not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+
+    add_columns("experiments", {
+        "conclusion": "TEXT DEFAULT ''",
+        "remind_end_min": "INTEGER NOT NULL DEFAULT 0",
+        "parent_id": "INTEGER REFERENCES experiments(id) ON DELETE CASCADE",
+        "follow_offset_min": "INTEGER NOT NULL DEFAULT 0",
+    })
+    add_columns("reminder_log", {
+        "confirmed": "INTEGER NOT NULL DEFAULT 0",
+    })
+    add_columns("plan_items", {
+        "is_experiment": "INTEGER NOT NULL DEFAULT 0",
+        "goal": "TEXT DEFAULT ''",
+        "steps": "TEXT DEFAULT ''",
+        "tags": "TEXT NOT NULL DEFAULT '[]'",
+        "remind_enabled": "INTEGER NOT NULL DEFAULT 0",
+        "remind_advance_min": "INTEGER NOT NULL DEFAULT 0",
+        "remind_on_time": "INTEGER NOT NULL DEFAULT 1",
+        "remind_end_min": "INTEGER NOT NULL DEFAULT 0",
+        "followups": "TEXT NOT NULL DEFAULT '[]'",
+    })
+    add_columns("templates", {
+        "followups": "TEXT NOT NULL DEFAULT '[]'",
+    })
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_exp_parent ON experiments(parent_id)")
 
 
 def init_db() -> None:

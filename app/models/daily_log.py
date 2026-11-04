@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+from datetime import datetime
+
 from ..database import execute, fetch_all, fetch_one, now_str
 from ..utils import time_utils
 
@@ -61,4 +63,21 @@ def carry_over_unfinished(from_date: str, to_date: str) -> list[str]:
         # 重新武装提醒（时间变了）
         execute("DELETE FROM reminder_log WHERE experiment_id = ?", (e["id"],))
         notes.append(f"{e['title']}：{from_date} → {to_date}")
+    # 跟随实验被结转后，重新计算它相对主实验结束的偏移，避免下次编辑主实验时被拉回
+    for e in exps:
+        if not e.get("parent_id"):
+            continue
+        parent = fetch_one("SELECT * FROM experiments WHERE id = ?", (e["parent_id"],))
+        child = fetch_one("SELECT * FROM experiments WHERE id = ?", (e["id"],))
+        if not parent or not child or not parent.get("planned_end") or not child.get("planned_start"):
+            continue
+        try:
+            base = datetime.strptime(parent["planned_end"], "%Y-%m-%d %H:%M")
+            start = datetime.strptime(child["planned_start"], "%Y-%m-%d %H:%M")
+        except (ValueError, TypeError):
+            continue
+        execute(
+            "UPDATE experiments SET follow_offset_min = ? WHERE id = ?",
+            (int((start - base).total_seconds() // 60), e["id"]),
+        )
     return notes

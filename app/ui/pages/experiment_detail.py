@@ -1,7 +1,6 @@
 """实验详情页：信息展示 + 状态流转 + 实验记录时间线（文字/Markdown/图片）。
 
-时间线用自定义 Widget 逐条渲染（每条记录一张卡），图片以独立缩略图展示
-而非塞进 QTextEdit/QTextBrowser，避免大量图片导致卡顿。
+时间线用自定义 Widget 逐条渲染（每条记录一张卡）；正文中的图片以富文本内联显示。
 图片：文件选择 / 拖拽 / 粘贴截图（Ctrl+V）三种方式，统一压缩为 JPG 存 data/images/。
 """
 from __future__ import annotations
@@ -13,6 +12,7 @@ from PySide6.QtGui import QIcon, QImage, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QDateTimeEdit,
+    QDialog,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from ... import config
-from ...models import experiment, record
+from ...models import experiment, record, weekly
 from ...utils import image_utils, markdown_utils, time_utils
 from ..components import (
     IMAGE_EXTS,
@@ -37,32 +37,37 @@ from ..components import (
     ImagePreviewDialog,
     ImageTextEdit,
     badge,
+    extract_markdown_images,
     make_expand_button,
 )
 
 class _RecordCard(Card):
     """时间线里的一条记录。"""
 
-    def __init__(self, rec: dict, images: list[dict], on_delete, on_image_click):
+    def __init__(self, rec: dict, on_delete, on_edit):
         super().__init__()
         lay = QVBoxLayout(self)
         lay.setContentsMargins(18, 14, 18, 14)
         lay.setSpacing(10)
 
-        # 时间 + 删除
+        # 时间 + 编辑 / 删除
         header = QHBoxLayout()
         header.setSpacing(8)
         time_lbl = QLabel(rec["record_time"])
         time_lbl.setObjectName("muted")
+        edit_btn = QPushButton("编辑")
+        edit_btn.setCursor(Qt.PointingHandCursor)
+        edit_btn.clicked.connect(lambda: on_edit(rec["id"]))
         del_btn = QPushButton("删除")
         del_btn.setCursor(Qt.PointingHandCursor)
         del_btn.clicked.connect(lambda: on_delete(rec["id"]))
         header.addWidget(time_lbl)
         header.addStretch()
+        header.addWidget(edit_btn)
         header.addWidget(del_btn)
         lay.addLayout(header)
 
-        # 正文（Markdown -> 富文本）
+        # 正文（Markdown -> 富文本，图片内联显示）
         content = (rec["content"] or "").strip()
         if content:
             body = QLabel()
@@ -71,15 +76,6 @@ class _RecordCard(Card):
             body.setTextInteractionFlags(Qt.TextSelectableByMouse)
             body.setText(markdown_utils.to_html(content))
             lay.addWidget(body)
-
-        # 图片：直接以大图展示，多图自动换行，点击放大预览
-        if images:
-            flow = FlowLayout()
-            for img in images:
-                lbl = ClickableImageLabel(img["path"])
-                lbl.clicked.connect(on_image_click)
-                flow.addWidget(lbl)
-            lay.addLayout(flow)
 
 
 class _AddRecordPanel(QWidget):
@@ -186,6 +182,8 @@ class _AddRecordPanel(QWidget):
         if rel in self._images:
             self._images.remove(rel)
             image_utils.delete_image(rel)
+            txt = self.body_edit.toPlainText().replace(f"![图片]({rel})", "")
+            self.body_edit.setPlainText(txt)
             self._rebuild_image_row()
 
     def _preview(self, rel: str) -> None:
@@ -235,8 +233,12 @@ class _AddRecordPanel(QWidget):
             self.experiment_id, content,
             self.time_edit.dateTime().toString("yyyy-MM-dd HH:mm:ss"),
         )
+        referenced = extract_markdown_images(content)
+        record.sync_record_images(rec_id, self.experiment_id, referenced)
+        # 清理正文里已被手动删掉、但文件仍残留的图片
         for rel in self._images:
-            record.add_image(rec_id, self.experiment_id, rel)
+            if rel not in referenced:
+                image_utils.delete_image(rel)
         self._images = []
         self._reset()
         self.saved.emit(rec_id)
@@ -259,10 +261,160 @@ class _AddRecordPanel(QWidget):
         self.body_edit.clear()
 
 
+class _RecordEditDialog(QDialog):
+    """编辑已有实验记录：时间 + 正文 + 图片管理。"""
+
+    def __init__(self, experiment_id: int, rec: dict, images: list[dict], parent=None):
+        super().__init__(parent)
+        self.experiment_id = experiment_id
+        self.record_id = rec["id"]
+        self._new_files: list[str] = []  # 本次编辑过程中新落盘的图片文件
+        self.setWindowTitle("编辑实验记录")
+        self.setMinimumWidth(640)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(20, 18, 20, 18)
+        root.setSpacing(12)
+
+        # 正文是图片引用的权威来源；把库里存在、但正文没写进去的图片补回正文，避免保存时误删
+        content = rec.get("content") or ""
+        referenced = set(extract_markdown_images(content))
+        missing = [img["path"] for img in images if img["path"] not in referenced]
+        if missing:
+            content = (content.rstrip() + "\n\n" + "\n".join(
+                f"![图片]({p})" for p in missing)).strip()
+
+        self.body_edit = ImageTextEdit()
+        self.body_edit.setPlainText(content)
+        self.body_edit.setFixedHeight(180)
+        self.body_edit.paste_image.connect(self._add_qimage)
+        self.body_edit.drop_image_file.connect(self._add_image_file)
+        self.body_edit.textChanged.connect(self._rebuild_image_row)
+
+        time_row = QHBoxLayout()
+        time_row.setSpacing(8)
+        time_row.addWidget(QLabel("记录时间"))
+        self.time_edit = QDateTimeEdit()
+        self.time_edit.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+        self.time_edit.setCalendarPopup(True)
+        self.time_edit.setDateTime(self._parse_time(rec.get("record_time") or ""))
+        time_row.addWidget(self.time_edit)
+        time_row.addStretch()
+        time_row.addWidget(make_expand_button(self.body_edit, "记录内容"))
+        root.addLayout(time_row)
+        root.addWidget(self.body_edit)
+
+        self.img_row = QHBoxLayout()
+        self.img_row.setSpacing(8)
+        self.img_row.addStretch()
+        root.addLayout(self.img_row)
+        self._rebuild_image_row()
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        insert_btn = QPushButton("插入图片")
+        insert_btn.setCursor(Qt.PointingHandCursor)
+        insert_btn.clicked.connect(self._choose_files)
+        cancel_btn = QPushButton("取消")
+        cancel_btn.setCursor(Qt.PointingHandCursor)
+        cancel_btn.clicked.connect(self.reject)
+        save_btn = QPushButton("保存")
+        save_btn.setObjectName("primaryBtn")
+        save_btn.setCursor(Qt.PointingHandCursor)
+        save_btn.setDefault(True)
+        save_btn.clicked.connect(self.accept)
+        btn_row.addWidget(insert_btn)
+        btn_row.addStretch()
+        btn_row.addWidget(cancel_btn)
+        btn_row.addWidget(save_btn)
+        root.addLayout(btn_row)
+
+    @staticmethod
+    def _parse_time(value: str) -> QDateTime:
+        if value:
+            dt = QDateTime.fromString(value, "yyyy-MM-dd HH:mm:ss")
+            if dt.isValid():
+                return dt
+        return QDateTime.currentDateTime()
+
+    # ---- 图片 ----
+    def _add_qimage(self, img: QImage) -> None:
+        rel = image_utils.save_image(img)
+        self._new_files.append(rel)
+        self.body_edit.appendPlainText(f"![图片]({rel})")
+
+    def _add_image_file(self, path: str) -> None:
+        rel = image_utils.save_image_file(path)
+        if rel:
+            self._new_files.append(rel)
+            self.body_edit.appendPlainText(f"![图片]({rel})")
+
+    def _choose_files(self) -> None:
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "选择图片", "", "图片 (*.png *.jpg *.jpeg *.gif *.bmp *.webp)"
+        )
+        for p in paths:
+            self._add_image_file(p)
+
+    def _rebuild_image_row(self) -> None:
+        while self.img_row.count() > 1:  # 保留末尾 stretch
+            item = self.img_row.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+        for rel in extract_markdown_images(self.body_edit.toPlainText()):
+            self.img_row.insertWidget(self.img_row.count() - 1, self._thumb(rel))
+
+    def _thumb(self, rel: str) -> QWidget:
+        wrap = QWidget()
+        v = QVBoxLayout(wrap)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(2)
+        btn = QToolButton()
+        pm = image_utils.load_pixmap(rel, 120)
+        if pm is not None:
+            btn.setIcon(QIcon(pm))
+        btn.setIconSize(QSize(72, 72))
+        btn.setFixedSize(80, 80)
+        btn.clicked.connect(lambda: self._preview(rel))
+        rm = QPushButton("移除")
+        rm.setCursor(Qt.PointingHandCursor)
+        rm.clicked.connect(lambda: self._remove_image(rel))
+        v.addWidget(btn)
+        v.addWidget(rm)
+        return wrap
+
+    def _remove_image(self, rel: str) -> None:
+        txt = self.body_edit.toPlainText().replace(f"![图片]({rel})", "")
+        self.body_edit.setPlainText(txt)
+        if rel in self._new_files:
+            self._new_files.remove(rel)
+            image_utils.delete_image(rel)
+
+    def _preview(self, rel: str) -> None:
+        pm = image_utils.load_pixmap(rel)
+        if pm is not None:
+            ImagePreviewDialog(pm, rel.split("/")[-1], self).exec()
+
+    # ---- 保存 ----
+    def accept(self) -> None:
+        content = self.body_edit.toPlainText()
+        record_time = self.time_edit.dateTime().toString("yyyy-MM-dd HH:mm:ss")
+        referenced = extract_markdown_images(content)
+        record.update_record(self.record_id, content, record_time)
+        record.sync_record_images(self.record_id, self.experiment_id, referenced)
+        # 本次新增、但最终没被正文引用的图片文件要清理掉
+        for rel in self._new_files:
+            if rel not in referenced:
+                image_utils.delete_image(rel)
+        super().accept()
+
+
 class ExperimentDetailPage(QWidget):
     back_requested = Signal()
     edit_requested = Signal(int)
     deleted = Signal(int)
+    open_requested = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -343,7 +495,31 @@ class ExperimentDetailPage(QWidget):
         self.actions_row.setSpacing(8)
         right.addLayout(self.actions_row)
         info_row.addWidget(right_card, 1)
-        outer.addLayout(info_row, 1)
+        outer.addLayout(info_row)
+
+        # 跟随实验：多条并行展示，可一键转规划
+        self.follow_card = Card()
+        fc = QVBoxLayout(self.follow_card)
+        fc.setContentsMargins(20, 14, 20, 14)
+        fc.setSpacing(8)
+        fhead = QHBoxLayout()
+        fl = QLabel("跟随实验")
+        fl.setObjectName("cardTitle")
+        self.follow_count = QLabel("")
+        self.follow_count.setObjectName("muted")
+        self.follow_add_btn = QPushButton("＋ 添加跟随实验")
+        self.follow_add_btn.setCursor(Qt.PointingHandCursor)
+        self.follow_add_btn.setToolTip("打开编辑窗口，一键添加多条跟随实验")
+        self.follow_add_btn.clicked.connect(
+            lambda: self.edit_requested.emit(self.exp_id or 0))
+        fhead.addWidget(fl)
+        fhead.addWidget(self.follow_count)
+        fhead.addStretch()
+        fhead.addWidget(self.follow_add_btn)
+        fc.addLayout(fhead)
+        self.follow_flow = FlowLayout()
+        fc.addLayout(self.follow_flow)
+        outer.addWidget(self.follow_card)
 
         # 实验结论（周整理可引用）
         conclusion_card = Card()
@@ -464,8 +640,7 @@ class ExperimentDetailPage(QWidget):
             self.timeline_layout.insertWidget(0, empty)
             return
         for rec in records:
-            imgs = record.list_images_for_record(rec["id"])
-            card = _RecordCard(rec, imgs, self._delete_record, self._preview_image)
+            card = _RecordCard(rec, self._delete_record, self._edit_record)
             self.timeline_layout.insertWidget(self.timeline_layout.count() - 1, card)
 
     def _delete_record(self, rec_id: int) -> None:
@@ -474,10 +649,141 @@ class ExperimentDetailPage(QWidget):
             record.delete_record(rec_id)
             self._reload_records()
 
+    def _edit_record(self, rec_id: int) -> None:
+        """打开编辑对话框，保存后刷新时间线。"""
+        if self.exp_id is None:
+            return
+        rec = record.get(rec_id)
+        if rec is None:
+            return
+        images = record.list_images_for_record(rec_id)
+        dlg = _RecordEditDialog(self.exp_id, rec, images, self)
+        if dlg.exec() == QDialog.Accepted:
+            self._reload_records()
+
     def _preview_image(self, rel: str) -> None:
         pm = image_utils.load_pixmap(rel)
         if pm is not None:
             ImagePreviewDialog(pm, rel.split("/")[-1], self).exec()
+
+    # ------------------------------------------------------------------ 跟随实验
+
+    def _reload_followups(self) -> None:
+        while self.follow_flow.count():
+            item = self.follow_flow.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+        if self.exp_id is None:
+            return
+        followups = experiment.list_followups(self.exp_id)
+        self.follow_count.setText(f"{len(followups)} 条" if followups else "暂无")
+        if not followups:
+            hint = QLabel("还没有跟随实验。点右上角「＋ 添加跟随实验」，可一次添加多条，实验详情里会并行显示。")
+            hint.setObjectName("muted")
+            hint.setWordWrap(True)
+            self.follow_flow.addWidget(hint)
+            return
+        for fu in followups:
+            self.follow_flow.addWidget(self._followup_card(fu))
+
+    def _followup_card(self, fu: dict) -> QWidget:
+        from PySide6.QtWidgets import QFrame
+
+        card = QFrame()
+        card.setObjectName("subCard")
+        card.setFixedWidth(300)
+        lay = QVBoxLayout(card)
+        lay.setContentsMargins(12, 10, 12, 10)
+        lay.setSpacing(6)
+
+        head = QHBoxLayout()
+        head.setSpacing(8)
+        title = QLabel(fu["title"])
+        title.setObjectName("cardTitle")
+        title.setWordWrap(True)
+        head.addWidget(title, 1)
+        head.addWidget(badge(
+            experiment.STATUS_LABELS.get(fu["status"], fu["status"]),
+            experiment.STATUS_COLORS.get(fu["status"], "subtext")))
+        lay.addLayout(head)
+
+        start = fu["planned_start"] or "未排定"
+        end = fu["planned_end"] or "—"
+        offset = int(fu["follow_offset_min"] or 0)
+        offset_text = "主实验结束后立即开始" if offset == 0 else (
+            f"主实验结束后 {time_utils.format_duration(offset)}开始")
+        time_label = QLabel(f"跟随时间：{start} ~ {end}\n{offset_text} · 耗时 "
+                            f"{time_utils.format_duration(fu['duration_min']) or '0分'}")
+        time_label.setObjectName("followTime")
+        time_label.setWordWrap(True)
+        lay.addWidget(time_label)
+
+        if (fu.get("goal") or "").strip():
+            goal = QLabel(f"目标：{fu['goal'].strip()}")
+            goal.setObjectName("muted")
+            goal.setWordWrap(True)
+            lay.addWidget(goal)
+        step_lines = [s.strip() for s in (fu.get("steps") or "").splitlines() if s.strip()]
+        if step_lines:
+            preview = "；".join(step_lines[:3])
+            if len(step_lines) > 3:
+                preview += "；…"
+            steps = QLabel(f"步骤 {len(step_lines)} 条：{preview}")
+            steps.setObjectName("muted")
+            steps.setWordWrap(True)
+            lay.addWidget(steps)
+
+        rec_count = record.count_records(int(fu["id"]))
+        has_conclusion = bool((fu.get("conclusion") or "").strip())
+        info = QLabel(f"实验记录 {rec_count} 条 · {'已有结论' if has_conclusion else '暂无结论'}")
+        info.setObjectName("muted")
+        info.setWordWrap(True)
+        lay.addWidget(info)
+
+        if fu["actual_start"] or fu["actual_end"]:
+            actual = QLabel(f"实际：{fu['actual_start'] or '—'} ~ {fu['actual_end'] or '—'}")
+            actual.setObjectName("muted")
+            actual.setWordWrap(True)
+            lay.addWidget(actual)
+        if fu["notes"]:
+            note = QLabel(fu["notes"])
+            note.setObjectName("muted")
+            note.setWordWrap(True)
+            lay.addWidget(note)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(6)
+        open_btn = QPushButton("记录/结论")
+        open_btn.setCursor(Qt.PointingHandCursor)
+        open_btn.setToolTip("打开这个跟随实验，写实验记录和结论")
+        open_btn.clicked.connect(lambda _=False, eid=fu["id"]: self.open_requested.emit(eid))
+        plan_btn = QPushButton("转规划")
+        plan_btn.setCursor(Qt.PointingHandCursor)
+        linked = weekly.find_plan_item_for_experiment(int(fu["id"]))
+        if linked is not None:
+            plan_btn.setText("已转规划")
+            plan_btn.setEnabled(False)
+        else:
+            plan_btn.clicked.connect(
+                lambda _=False, eid=fu["id"]: self._convert_followup(eid))
+        btn_row.addStretch()
+        btn_row.addWidget(open_btn)
+        btn_row.addWidget(plan_btn)
+        lay.addLayout(btn_row)
+        return card
+
+    def _convert_followup(self, fu_id: int) -> None:
+        fu = experiment.get(fu_id)
+        if fu is None:
+            return
+        target = (fu["planned_start"] or "")[:10] or datetime.now().strftime("%Y-%m-%d")
+        item_id = weekly.convert_experiment_to_plan(fu_id, target)
+        if item_id:
+            QMessageBox.information(
+                self, config.APP_NAME,
+                f"已把「{fu['title']}」加入实验规划（{target}）。")
+            self._reload_followups()
 
     # ------------------------------------------------------------------ 数据
 
@@ -500,7 +806,7 @@ class ExperimentDetailPage(QWidget):
         self.steps_label.setText(exp["steps"] or "（未填写步骤）")
 
         lines = [
-            f"计划：{exp['planned_start'] or '—'} → {exp['planned_end'] or '—'}"
+            f"实验时间：{exp['planned_start'] or '—'} → {exp['planned_end'] or '—'}"
             f"（{time_utils.format_duration(exp['duration_min'])}）",
             f"实际开始：{exp['actual_start'] or '—'}",
             f"实际结束：{exp['actual_end'] or '—'}",
@@ -517,6 +823,7 @@ class ExperimentDetailPage(QWidget):
 
         self.add_panel.experiment_id = exp_id
         self._reload_records()
+        self._reload_followups()
 
     # ------------------------------------------------------------------ 结论
 

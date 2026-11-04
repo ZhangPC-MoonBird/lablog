@@ -117,6 +117,11 @@ QWidget#weatherChip { background: __BG__; border: 1px solid __BORDER__; border-r
 /* 卡片 */
 QFrame#card { background: __CARD__; border: 1px solid __BORDER__; border-radius: 12px; }
 QWidget#card { background: __CARD__; border: 1px solid __BORDER__; border-radius: 12px; }
+QFrame#subCard { background: __BG__; border: 1px solid __BORDER__; border-radius: 8px; }
+QWidget#followupEditor { background: transparent; }
+QLabel#followTime { color: __PRIMARY__; font-size: 12px; }
+QLabel#sectionHeader { color: __TEXT__; font-size: 14px; font-weight: 700;
+                       padding: 8px 2px 2px 2px; }
 QLabel#pageTitle { font-size: 20px; font-weight: 700; color: __TEXT__; background: transparent; }
 QLabel#cardTitle { font-size: 15px; font-weight: 600; color: __TEXT__; background: transparent; }
 QLabel#statValue { font-size: 26px; font-weight: 700; color: __TEXT__; background: transparent; }

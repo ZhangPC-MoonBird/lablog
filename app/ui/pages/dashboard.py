@@ -146,6 +146,8 @@ class DashboardPage(QWidget):
         title = QLabel(e["title"])
         title.setWordWrap(True)
         h.addWidget(title, 1)
+        if e.get("parent_id"):
+            h.addWidget(badge("跟随", "warning"))
         h.addWidget(badge(
             experiment.STATUS_LABELS.get(e["status"], e["status"]),
             experiment.STATUS_COLORS.get(e["status"], "subtext")))

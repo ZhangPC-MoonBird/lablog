@@ -69,6 +69,8 @@ class _BoardCard(QWidget):
             meta.addWidget(t)
         meta.addWidget(badge(experiment.PRIORITY_LABELS.get(exp["priority"], "中"),
                              experiment.PRIORITY_COLORS.get(exp["priority"], "warning")))
+        if exp.get("parent_id"):
+            meta.addWidget(badge("跟随", "warning"))
         meta.addStretch()
 
         time_label = QLabel(self._time_text(exp))
@@ -130,6 +132,11 @@ class ExperimentsPage(QWidget):
         self.type_combo.setMinimumWidth(120)
         self.status_combo = QComboBox()
         self.status_combo.setMinimumWidth(100)
+        self.follow_combo = QComboBox()
+        self.follow_combo.addItem("全部实验", "all")
+        self.follow_combo.addItem("仅主实验", "main")
+        self.follow_combo.addItem("仅跟随实验", "followup")
+        self.follow_combo.setMinimumWidth(110)
         self._view_group = QButtonGroup(self)
         self._view_group.setExclusive(True)
         self.list_btn = QPushButton("列表")
@@ -156,6 +163,7 @@ class ExperimentsPage(QWidget):
         top.addWidget(self.search_edit)
         top.addWidget(self.type_combo)
         top.addWidget(self.status_combo)
+        top.addWidget(self.follow_combo)
         top.addWidget(manage_type_btn)
         top.addSpacing(6)
         top.addWidget(self.list_btn)
@@ -178,6 +186,7 @@ class ExperimentsPage(QWidget):
         self.search_edit.textChanged.connect(self.refresh)
         self.type_combo.currentIndexChanged.connect(self.refresh)
         self.status_combo.currentIndexChanged.connect(self.refresh)
+        self.follow_combo.currentIndexChanged.connect(self.refresh)
         self.list_btn.clicked.connect(self._apply_view)
         self.board_btn.clicked.connect(self._apply_view)
 
@@ -188,7 +197,7 @@ class ExperimentsPage(QWidget):
     def _build_table(self) -> QTableWidget:
         table = QTableWidget(0, 9)
         table.setHorizontalHeaderLabels(
-            ["#", "标题", "类型", "计划开始", "预计耗时", "预计结束", "状态", "优先级", "标签"]
+            ["#", "标题", "类型", "实验时间", "耗时", "结束时间", "状态", "优先级", "标签"]
         )
         table.setSelectionBehavior(QTableWidget.SelectRows)
         table.setSelectionMode(QTableWidget.SingleSelection)
@@ -235,6 +244,7 @@ class ExperimentsPage(QWidget):
             status=self.status_combo.currentData(),
             type_=self.type_combo.currentData(),
             keyword=self.search_edit.text(),
+            follow_scope=self.follow_combo.currentData() or "all",
         )
         self._rebuild_table()
         self._rebuild_board()
@@ -305,7 +315,11 @@ class ExperimentsPage(QWidget):
         block.setStyleSheet(f"background: {color}; border-radius: 3px;")
         h.addWidget(block)
         title = QLabel(exp["title"])
+        if exp.get("parent_id"):
+            title.setToolTip("跟随实验")
         h.addWidget(title)
+        if exp.get("parent_id"):
+            h.addWidget(badge("跟随", "warning"))
         h.addStretch()
         return wrap
 
@@ -366,6 +380,10 @@ class ExperimentsPage(QWidget):
         act_plan = menu.addAction("转为今日规划")
         act_view = menu.addAction("查看详情")
         act_edit = menu.addAction("编辑")
+        exp = experiment.get(exp_id)
+        act_parent = None
+        if exp is not None and exp.get("parent_id"):
+            act_parent = menu.addAction("查看所属实验")
         act_del = menu.addAction("删除")
         chosen = menu.exec(self.list_table.viewport().mapToGlobal(pos))
         # 菜单关闭后取消行选中，避免残留蓝色选中条
@@ -383,6 +401,8 @@ class ExperimentsPage(QWidget):
             self.refresh()
         elif chosen == act_view:
             self.open_experiment.emit(exp_id)
+        elif act_parent is not None and chosen == act_parent:
+            self.open_experiment.emit(int(exp["parent_id"]))
         elif chosen == act_edit:
             self.edit_experiment.emit(exp_id)
         elif chosen == act_del:

@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -27,6 +28,7 @@ from ... import config
 from ...models import experiment
 from ...models import template
 from ..components import make_expand_button
+from .experiment_form import FollowupEditor
 
 
 class TemplateEditDialog(QDialog):
@@ -36,7 +38,8 @@ class TemplateEditDialog(QDialog):
         super().__init__(parent)
         self.template_id = template_id
         self.setWindowTitle("编辑模板" if template_id else "创建模板")
-        self.setMinimumWidth(560)
+        self.setMinimumSize(620, 700)
+        self.resize(700, 800)
         self._build_ui()
         if template_id is not None:
             self._load(template_id)
@@ -62,6 +65,7 @@ class TemplateEditDialog(QDialog):
         self.end_check.setChecked(end_min > 0)
         self.end_min_spin.setValue(end_min if end_min > 0 else 10)
         self.notes_edit.setPlainText(t["notes"] or "")
+        self.followup_editor.set_specs(template.followups_list(t))
 
     def _build_ui(self) -> None:
         form = QFormLayout()
@@ -135,6 +139,8 @@ class TemplateEditDialog(QDialog):
         self.notes_edit.setPlaceholderText("备注，如：注意事项")
         self.notes_edit.setFixedHeight(70)
 
+        self.followup_editor = FollowupEditor()
+
         form.addRow("模板名称 *", self.name_edit)
         form.addRow("类型", self.type_combo)
         form.addRow("优先级", self.priority_combo)
@@ -143,6 +149,7 @@ class TemplateEditDialog(QDialog):
         form.addRow("预计耗时", dur_widget)
         form.addRow("提醒", remind_widget)
         form.addRow("备注", self._with_expand(self.notes_edit, "备注"))
+        form.addRow("跟随实验", self.followup_editor)
 
         btn_row = QHBoxLayout()
         btn_row.addStretch()
@@ -156,9 +163,16 @@ class TemplateEditDialog(QDialog):
         btn_row.addWidget(save_btn)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(24, 20, 24, 20)
+        root.setContentsMargins(20, 16, 20, 16)
         root.setSpacing(12)
-        root.addLayout(form)
+
+        form_host = QWidget()
+        form_host.setLayout(form)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setWidget(form_host)
+        root.addWidget(scroll, 1)
         root.addLayout(btn_row)
 
     @staticmethod
@@ -191,6 +205,7 @@ class TemplateEditDialog(QDialog):
             "remind_on_time": int(self.on_time_check.isChecked()) if remind_on else 0,
             "remind_end_min": self.end_min_spin.value() if (remind_on and self.end_check.isChecked()) else 0,
             "notes": self.notes_edit.toPlainText(),
+            "followups": self.followup_editor.specs(),
         }
         if self.template_id is None:
             template.create(data)
