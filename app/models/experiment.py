@@ -241,6 +241,11 @@ def followup_specs(parent_id: int) -> list[dict]:
             "offset_min": int(f["follow_offset_min"] or 0),
             "duration_min": int(f["duration_min"] or 0),
             "notes": f["notes"] or "",
+            "priority": f["priority"] or "medium",
+            "remind_enabled": int(f["remind_enabled"] or 0),
+            "remind_advance_min": int(f["remind_advance_min"] or 0),
+            "remind_on_time": int(f["remind_on_time"] or 0),
+            "remind_end_min": int(f["remind_end_min"] or 0),
         }
         for f in list_followups(parent_id)
     ]
@@ -267,7 +272,16 @@ def create_followup(parent_id: int, spec: dict) -> int:
     offset = int(spec.get("offset_min") or 0)
     duration = int(spec.get("duration_min") or 0)
     start = _followup_start(parent, offset)
-    advance, on_time = _default_remind()
+    if "remind_enabled" in spec:
+        remind_enabled = int(spec.get("remind_enabled") or 0)
+        advance = int(spec.get("remind_advance_min") or 0)
+        on_time = int(spec.get("remind_on_time") or 0)
+        end_min = int(spec.get("remind_end_min") or 0)
+    else:
+        advance, on_time = _default_remind()
+        remind_enabled = 1 if start else 0
+        end_min = 0
+    priority = spec.get("priority") or (parent["priority"] if parent else "medium")
     title = (spec.get("title") or "").strip() or "跟随实验"
     return create({
         "title": title,
@@ -277,13 +291,13 @@ def create_followup(parent_id: int, spec: dict) -> int:
         "planned_start": start,
         "duration_min": duration,
         "status": "planned",
-        "priority": parent["priority"] if parent else "medium",
+        "priority": priority,
         "tags": [],
         "notes": spec.get("notes") or "",
-        "remind_enabled": 1 if start else 0,
+        "remind_enabled": remind_enabled,
         "remind_advance_min": advance,
         "remind_on_time": on_time,
-        "remind_end_min": 0,
+        "remind_end_min": end_min,
         "parent_id": parent_id,
         "follow_offset_min": offset,
         "source": "followup",
@@ -324,16 +338,29 @@ def sync_followups(parent_id: int, specs: list[dict]) -> list[dict]:
         if sid and int(sid) in existing:
             child = existing[int(sid)]
             seen.add(int(sid))
+            priority = spec.get("priority") or child["priority"] or "medium"
+            remind_enabled = int(spec.get("remind_enabled", child["remind_enabled"] or 0))
+            advance = int(spec.get("remind_advance_min", child["remind_advance_min"] or 0))
+            on_time = int(spec.get("remind_on_time", child["remind_on_time"] or 0))
+            end_min = int(spec.get("remind_end_min", child["remind_end_min"] or 0))
             execute(
                 "UPDATE experiments SET title = ?, type = ?, goal = ?, steps = ?, notes = ?, "
-                "follow_offset_min = ?, duration_min = ?, updated_at = ? WHERE id = ?",
-                (title, type_, goal, steps, notes, offset, duration, now_str(), child["id"]),
+                "priority = ?, remind_enabled = ?, remind_advance_min = ?, "
+                "remind_on_time = ?, remind_end_min = ?, follow_offset_min = ?, "
+                "duration_min = ?, updated_at = ? WHERE id = ?",
+                (title, type_, goal, steps, notes, priority, remind_enabled,
+                 advance, on_time, end_min, offset, duration, now_str(), child["id"]),
             )
             _set_child_schedule(child, start, end)
         else:
             create_followup(parent_id, {
                 "title": title, "type": type_, "goal": goal, "steps": steps,
                 "offset_min": offset, "duration_min": duration, "notes": notes,
+                "priority": spec.get("priority"),
+                "remind_enabled": spec.get("remind_enabled"),
+                "remind_advance_min": spec.get("remind_advance_min"),
+                "remind_on_time": spec.get("remind_on_time"),
+                "remind_end_min": spec.get("remind_end_min"),
             })
     for sid, child in existing.items():
         if sid not in seen:

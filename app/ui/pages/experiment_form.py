@@ -62,9 +62,18 @@ class FollowupEditor(QWidget):
         self.add_btn.setCursor(Qt.PointingHandCursor)
         self.add_btn.setToolTip("实验结束后需要继续测量/观察时，添加一条完整实验")
         self.add_btn.clicked.connect(lambda: self.add_row())
-        hint = QLabel("可添加多个；每个跟随实验有自己的目标、步骤、记录和结论")
+        self.template_add_combo = QComboBox()
+        self.template_add_combo.addItem("从模板添加跟随实验…", None)
+        for t in template.list_templates():
+            self.template_add_combo.addItem(t["name"], t["id"])
+        self.template_add_combo.setMinimumWidth(150)
+        self.template_add_combo.setToolTip("选择一个实验模板，自动添加并填好一条跟随实验")
+        self.template_add_combo.currentIndexChanged.connect(
+            lambda *_: self._on_add_template())
+        hint = QLabel("可添加多个；也可从模板载入")
         hint.setObjectName("muted")
         head.addWidget(self.add_btn)
+        head.addWidget(self.template_add_combo)
         head.addWidget(hint)
         head.addStretch()
         root.addLayout(head)
@@ -78,6 +87,7 @@ class FollowupEditor(QWidget):
         self.rows_layout = QVBoxLayout()
         self.rows_layout.setContentsMargins(0, 0, 0, 0)
         self.rows_layout.setSpacing(6)
+        self.rows_layout.addStretch()
         root.addLayout(self.rows_layout)
         self._refresh_empty()
 
@@ -117,6 +127,16 @@ class FollowupEditor(QWidget):
         goal.setText(spec.get("goal") or "")
         goal_row.addWidget(QLabel("目标"))
         goal_row.addWidget(goal, 1)
+
+        tpl_row = QHBoxLayout()
+        tpl_row.setSpacing(6)
+        tpl_row.addWidget(QLabel("模板"))
+        template_combo = QComboBox()
+        template_combo.addItem("从模板载入…", None)
+        for t in template.list_templates():
+            template_combo.addItem(t["name"], t["id"])
+        template_combo.setToolTip("用实验模板填充这条跟随实验的标题/目标/步骤/耗时/提醒")
+        tpl_row.addWidget(template_combo, 1)
 
         offset = spec.get("offset_min")
         offset = 0 if offset is None else int(offset)
@@ -174,6 +194,7 @@ class FollowupEditor(QWidget):
         notes.setText(spec.get("notes") or "")
 
         v.addLayout(head)
+        v.addLayout(tpl_row)
         v.addLayout(goal_row)
         v.addLayout(offset_row)
         v.addLayout(dur_row)
@@ -197,12 +218,27 @@ class FollowupEditor(QWidget):
             "dur_m": dur_m,
             "time_label": time_label,
             "notes": notes,
+            "template_combo": template_combo,
+            "priority": spec.get("priority"),
+            "remind_enabled": spec.get("remind_enabled"),
+            "remind_advance_min": spec.get("remind_advance_min"),
+            "remind_on_time": spec.get("remind_on_time"),
+            "remind_end_min": spec.get("remind_end_min"),
         }
         self._rows.append(entry)
-        self.rows_layout.addWidget(row)
+        self.rows_layout.insertWidget(self.rows_layout.count() - 1, row)
         remove_btn.clicked.connect(lambda _=False, e=entry: self._remove_row(e))
         for widget in (offset_d, offset_h, offset_m, dur_d, dur_h, dur_m):
             widget.valueChanged.connect(lambda *_, e=entry: self._refresh_row_time(e))
+        template_combo.currentIndexChanged.connect(
+            lambda *_, e=entry: self._on_row_template(e))
+        tpl_id = spec.get("template_id")
+        if tpl_id:
+            idx = template_combo.findData(int(tpl_id))
+            if idx >= 0:
+                template_combo.blockSignals(True)
+                template_combo.setCurrentIndex(idx)
+                template_combo.blockSignals(False)
         self._refresh_row_time(entry)
         self._refresh_empty()
         if focus:
@@ -212,11 +248,75 @@ class FollowupEditor(QWidget):
     def _remove_row(self, entry: dict) -> None:
         if entry in self._rows:
             self._rows.remove(entry)
+            self.rows_layout.removeWidget(entry["widget"])
             entry["widget"].deleteLater()
             self._refresh_empty()
 
     def _refresh_empty(self) -> None:
         self.empty_label.setVisible(not self._rows)
+
+    def _on_add_template(self) -> None:
+        """顶部“从模板添加跟随实验”：选模板后直接新增一条并填好。"""
+        tpl_id = self.template_add_combo.currentData()
+        if tpl_id is None:
+            return
+        self.template_add_combo.blockSignals(True)
+        self.template_add_combo.setCurrentIndex(0)
+        self.template_add_combo.blockSignals(False)
+        t = template.get(int(tpl_id))
+        if t is not None:
+            self.add_row(self._template_to_spec(t))
+
+    @staticmethod
+    def _template_to_spec(t: dict) -> dict:
+        remind_enabled = int(bool(
+            int(t["remind_advance_min"] or 0)
+            or int(t["remind_on_time"] or 0)
+            or int(t["remind_end_min"] or 0)
+        ))
+        return {
+            "template_id": int(t["id"]),
+            "title": t["name"],
+            "type": t["type"] or "",
+            "goal": t["goal"] or "",
+            "steps": t["steps"] or "",
+            "offset_min": 0,
+            "duration_min": int(t["duration_min"] or 0),
+            "notes": t["notes"] or "",
+            "priority": t["priority"] or "medium",
+            "remind_enabled": remind_enabled,
+            "remind_advance_min": int(t["remind_advance_min"] or 0),
+            "remind_on_time": int(t["remind_on_time"] or 0),
+            "remind_end_min": int(t["remind_end_min"] or 0),
+        }
+
+    def _on_row_template(self, entry: dict) -> None:
+        """跟随实验行内选择模板：覆盖标题/目标/步骤/耗时/提醒，保留跟随偏移。"""
+        tpl_id = entry["template_combo"].currentData()
+        if tpl_id is None:
+            return
+        t = template.get(int(tpl_id))
+        if t is None:
+            return
+        spec = self._template_to_spec(t)
+        entry["title"].setText(spec["title"])
+        entry["type"].setCurrentText(spec["type"])
+        entry["goal"].setText(spec["goal"])
+        entry["steps"].setPlainText(spec["steps"])
+        entry["notes"].setText(spec["notes"])
+        self._set_duration(entry, spec["duration_min"])
+        entry["priority"] = spec["priority"]
+        entry["remind_enabled"] = spec["remind_enabled"]
+        entry["remind_advance_min"] = spec["remind_advance_min"]
+        entry["remind_on_time"] = spec["remind_on_time"]
+        entry["remind_end_min"] = spec["remind_end_min"]
+
+    @staticmethod
+    def _set_duration(entry: dict, minutes: int) -> None:
+        minutes = int(minutes or 0)
+        entry["dur_d"].setValue(minutes // (24 * 60))
+        entry["dur_h"].setValue((minutes % (24 * 60)) // 60)
+        entry["dur_m"].setValue(minutes % 60)
 
     def _refresh_row_time(self, entry: dict) -> None:
         offset = (entry["offset_d"].value() * 24 * 60
@@ -275,6 +375,12 @@ class FollowupEditor(QWidget):
             }
             if entry.get("id"):
                 item["id"] = int(entry["id"])
+            if entry.get("priority"):
+                item["priority"] = entry["priority"]
+            for key in ("remind_enabled", "remind_advance_min",
+                        "remind_on_time", "remind_end_min"):
+                if entry.get(key) is not None:
+                    item[key] = int(entry[key])
             result.append(item)
         return result
 

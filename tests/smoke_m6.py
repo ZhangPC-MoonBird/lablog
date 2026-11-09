@@ -33,6 +33,7 @@ from app.models import experiment, template, weekly
 from app.ui import theme
 from app.ui.main_window import MainWindow
 from app.ui.pages.experiment_edit import ExperimentEditDialog
+from app.ui.pages.experiment_form import ExperimentCoreForm
 from app.ui.pages.overview import OverviewPage
 from app.ui.pages.planner import PlanItemDialog
 from app.utils import time_utils
@@ -117,6 +118,7 @@ def main() -> int:
     tpl_id = template.create({
         "name": "24h 测量模板", "type": "细胞培养", "duration_min": 120,
         "goal": "模板目标", "steps": "模板步骤", "priority": "high",
+        "remind_advance_min": 5, "remind_on_time": 1, "remind_end_min": 10,
         "followups": specs,
     })
     tpl = template.get(tpl_id)
@@ -124,6 +126,33 @@ def main() -> int:
     check("模板保存跟随实验", len(tpl_specs) == 2)
     check("模板保存跟随步骤", "取样" in tpl_specs[0].get("steps", ""))
     check("模板保存跟随目标", tpl_specs[0].get("goal") == "检测 CCR2 表达")
+
+    # 跟随实验从模板添加：目标/步骤/耗时/优先级/提醒一起带入
+    form = ExperimentCoreForm()
+    combo = form.followup_editor.template_add_combo
+    idx_tpl = combo.findData(tpl_id)
+    check("跟随模板下拉存在", idx_tpl >= 0)
+    combo.setCurrentIndex(idx_tpl)
+    check("从模板添加跟随行", len(form.followup_editor._rows) == 1)
+    row = form.followup_editor._rows[0]
+    check("模板填充跟随标题", row["title"].text() == tpl["name"], row["title"].text())
+    check("模板填充跟随步骤", "模板步骤" in row["steps"].toPlainText())
+    ui_specs = form.followup_editor.specs()
+    check("模板填充跟随优先级", ui_specs and ui_specs[0].get("priority") == "high")
+    check("模板填充跟随提醒",
+          ui_specs and ui_specs[0].get("remind_enabled") == 1
+          and ui_specs[0].get("remind_advance_min") == 5
+          and ui_specs[0].get("remind_end_min") == 10)
+    tpl_parent = experiment.create({
+        "title": "模板跟随主实验", "planned_start": "2026-11-08 10:00",
+        "duration_min": 60,
+    })
+    experiment.sync_followups(tpl_parent, ui_specs)
+    tpl_fu = experiment.list_followups(tpl_parent)[0]
+    check("跟随模板优先级落库", tpl_fu["priority"] == "high")
+    check("跟随模板提醒落库",
+          tpl_fu["remind_enabled"] == 1 and tpl_fu["remind_advance_min"] == 5
+          and tpl_fu["remind_end_min"] == 10)
 
     # ---- 4. 规划项“实验模式” -> 实验：完整字段带入 ----
     week_start = time_utils.monday_of(date(2026, 11, 3)).strftime("%Y-%m-%d")
