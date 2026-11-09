@@ -797,12 +797,13 @@ class ExperimentDetailPage(QWidget):
         fu = experiment.get(fu_id)
         if fu is None:
             return
-        target = (fu["planned_start"] or "")[:10] or datetime.now().strftime("%Y-%m-%d")
-        item_id = weekly.convert_experiment_to_plan(fu_id, target)
+        item_id = weekly.convert_experiment_to_plan(fu_id)
         if item_id:
+            item = weekly.get_item(item_id)
+            plan_date = (item or {}).get("planned_date") or (fu["planned_start"] or "")[:10] or "实验开始日"
             QMessageBox.information(
                 self, config.APP_NAME,
-                f"已把「{fu['title']}」加入实验规划（{target}）。")
+                f"已按实验开始日期把「{fu['title']}」加入实验规划（{plan_date}）。")
             self._reload_followups()
 
     # ------------------------------------------------------------------ 数据

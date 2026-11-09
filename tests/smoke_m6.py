@@ -167,12 +167,23 @@ def main() -> int:
     starts = [f["planned_start"] for f in experiment.list_followups(exp_id)]
     check("拖动后跟随仍在同一天", starts == ["2026-11-06 17:00", "2026-11-06 19:00"], str(starts))
 
-    # ---- 6. 实验 -> 规划去重 ----
-    item2 = weekly.convert_experiment_to_plan(exp_id, "2026-11-07")
+    # ---- 6. 实验 -> 规划：默认按实验开始日期，去重 ----
+    item2 = weekly.convert_experiment_to_plan(exp_id)
     check("实验转规划复用原规划项", item2 == plan_id, f"{item2} vs {plan_id}")
+    plan_item2 = weekly.get_item(item2)
+    check("实验转规划默认使用开始日期", plan_item2["planned_date"] == "2026-11-06",
+          str(plan_item2["planned_date"]))
     all_items = weekly.list_items_range("2026-11-02", "2026-11-08")
     linked = [it for it in all_items if it["linked_experiment_id"] == exp_id]
     check("实验转规划不重复创建", len(linked) == 1, str(len(linked)))
+
+    # 跟随实验转规划也使用跟随实验自己的开始日期
+    fu = experiment.list_followups(exp_id)[0]
+    fu_item = weekly.convert_experiment_to_plan(fu["id"])
+    fu_plan = weekly.get_item(fu_item)
+    check("跟随实验转规划使用跟随开始日",
+          fu_plan["planned_date"] == fu["planned_start"][:10],
+          f"{fu_plan['planned_date']} vs {fu['planned_start'][:10]}")
 
     # ---- 7. 删除主实验级联删除跟随实验 ----
     child_ids = [f["id"] for f in experiment.list_followups(parent_id)]

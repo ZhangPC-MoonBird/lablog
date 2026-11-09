@@ -367,44 +367,58 @@ class PlanCard(QFrame):
         lay.addWidget(strip)
 
         body = QVBoxLayout()
-        body.setContentsMargins(10, 10, 10, 10)
-        body.setSpacing(6)
+        body.setContentsMargins(8, 8, 8, 8)
+        body.setSpacing(4)
 
         title = QLabel(item["title"])
         title.setWordWrap(True)
         title.setObjectName("cardTitle")
+        title.setStyleSheet("font-size: 13px; font-weight: 600;")
 
         time_text = f"{item['planned_start'] or '—'} ~ {item['planned_end'] or '—'}"
         if item.get("planned_start") and item.get("planned_end") and item["planned_end"] < item["planned_start"]:
             time_text += "（跨天）"
         time_label = QLabel(time_text)
-        time_label.setObjectName("cardTitle")
+        time_label.setObjectName("muted")
+        time_label.setWordWrap(True)
+        time_label.setStyleSheet("font-size: 12px;")
 
-        meta = QHBoxLayout()
-        meta.setSpacing(6)
+        meta = QVBoxLayout()
+        meta.setSpacing(2)
+        meta.addWidget(badge(_PLAN_STATUS.get(item["status"], item["status"]),
+                             _PLAN_STATUS_COLORS.get(item["status"], "subtext")))
         dur = time_utils.format_duration(item["duration_min"])
         if dur:
-            meta.addWidget(QLabel(dur))
+            dur_label = QLabel(dur)
+            dur_label.setObjectName("muted")
+            dur_label.setWordWrap(True)
+            meta.addWidget(dur_label)
         if item.get("is_experiment"):
             meta.addWidget(badge("实验", "primary"))
         followups = _parse_list(item.get("followups"))
         if followups:
             meta.addWidget(badge(f"跟随 {len(followups)}", "warning"))
-        meta.addWidget(badge(_PLAN_STATUS.get(item["status"], item["status"]),
-                             _PLAN_STATUS_COLORS.get(item["status"], "subtext")))
-        meta.addStretch()
 
         btns = QHBoxLayout()
         btns.setSpacing(4)
-        conv = QPushButton("转实验")
+        conv = QPushButton("转")
         conv.setCursor(Qt.PointingHandCursor)
+        conv.setToolTip("转为正式实验" if not item["linked_experiment_id"] else "已转为实验")
+        conv.setFixedWidth(26)
+        conv.setStyleSheet("padding: 1px 2px; font-size: 11px;")
         conv.setEnabled(not item["linked_experiment_id"])
         conv.clicked.connect(lambda: on_convert(item["id"]))
-        edit = QPushButton("编辑")
+        edit = QPushButton("编")
         edit.setCursor(Qt.PointingHandCursor)
+        edit.setToolTip("编辑规划项")
+        edit.setFixedWidth(26)
+        edit.setStyleSheet("padding: 1px 2px; font-size: 11px;")
         edit.clicked.connect(lambda: (on_edit(item["id"]) if on_edit else None))
         dele = QPushButton("删")
         dele.setCursor(Qt.PointingHandCursor)
+        dele.setToolTip("删除规划项")
+        dele.setFixedWidth(26)
+        dele.setStyleSheet("padding: 1px 2px; font-size: 11px;")
         dele.clicked.connect(lambda: on_delete(item["id"]))
         btns.addStretch()
         btns.addWidget(conv)
@@ -632,10 +646,16 @@ class PlannerPage(QWidget):
         drop_row.addStretch()
         outer.addLayout(drop_row)
 
-        # 七列（固定等宽格子，每列独立纵向滚动，禁止横向滚动）
-        self.columns_layout = QHBoxLayout()
+        # 七列：每列最小 120px；窗口较窄时整体横向滚动，列内独立纵向滚动
+        self.columns_scroll = QScrollArea()
+        self.columns_scroll.setWidgetResizable(True)
+        self.columns_scroll.setFrameShape(QScrollArea.NoFrame)
+        self.columns_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.columns_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        columns_host = QWidget()
+        self.columns_layout = QHBoxLayout(columns_host)
         self.columns_layout.setContentsMargins(0, 0, 0, 0)
-        self.columns_layout.setSpacing(10)
+        self.columns_layout.setSpacing(8)
         monday = datetime.strptime(self.week_start, "%Y-%m-%d").date()
         for i in range(7):
             d = (monday + timedelta(days=i)).strftime("%Y-%m-%d")
@@ -646,9 +666,11 @@ class PlannerPage(QWidget):
             scroll.setWidgetResizable(True)
             scroll.setFrameShape(QScrollArea.NoFrame)
             scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            scroll.setMinimumWidth(120)
             scroll.setWidget(col)
             self.columns_layout.addWidget(scroll, 1)
-        outer.addLayout(self.columns_layout, 1)
+        self.columns_scroll.setWidget(columns_host)
+        outer.addWidget(self.columns_scroll, 1)
 
         # 底部统计
         self.footer = Card()

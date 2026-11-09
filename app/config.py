@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "实验助手"
-APP_VERSION = "2.0.1"
+APP_VERSION = "2.0.2"
 ORG_NAME = "LabLog"
 
 

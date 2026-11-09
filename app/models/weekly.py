@@ -308,9 +308,19 @@ def find_plan_item_for_experiment(exp_id: int) -> dict | None:
     )
 
 
+def _experiment_plan_date(exp: dict) -> str:
+    """转规划默认使用实验开始日期（计划开始优先，其次实际开始，最后今天）。"""
+    start = (exp.get("planned_start") or "")[:10]
+    if start:
+        return start
+    actual = (exp.get("actual_start") or "")[:10]
+    return actual or datetime.now().strftime("%Y-%m-%d")
+
+
 def _experiment_plan_data(exp: dict, target_date: str) -> dict:
     """实验 -> 规划项字段（完整保留目标/步骤/提醒/跟随，转过去不用重写）。"""
-    time_part = (exp["planned_start"] or "")[11:16] or "09:00"
+    source_start = exp["planned_start"] or exp.get("actual_start") or ""
+    time_part = source_start[11:16] or "09:00"
     week_start = time_utils.monday_of(
         datetime.strptime(target_date, "%Y-%m-%d").date()).strftime("%Y-%m-%d")
     return {
@@ -334,11 +344,13 @@ def _experiment_plan_data(exp: dict, target_date: str) -> dict:
     }
 
 
-def convert_experiment_to_plan(exp_id: int, target_date: str) -> int | None:
-    """把实验转成指定日期（如今天）的规划项；已转过则更新原规划项，不重复创建。"""
+def convert_experiment_to_plan(exp_id: int, target_date: str | None = None) -> int | None:
+    """把实验转成规划项；默认按实验开始日期，已转过则更新原规划项，不重复创建。"""
     exp = experiment.get(exp_id)
     if exp is None:
         return None
+    if not target_date:
+        target_date = _experiment_plan_date(exp)
     data = _experiment_plan_data(exp, target_date)
     existing = find_plan_item_for_experiment(exp_id)
     if existing is not None:

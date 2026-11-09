@@ -377,7 +377,7 @@ class ExperimentsPage(QWidget):
             return
         menu = QMenu(self)
         act_start = menu.addAction("开始实验")
-        act_plan = menu.addAction("转为今日规划")
+        act_plan = menu.addAction("转为规划")
         act_view = menu.addAction("查看详情")
         act_edit = menu.addAction("编辑")
         exp = experiment.get(exp_id)
@@ -392,12 +392,9 @@ class ExperimentsPage(QWidget):
             experiment.mark_started(exp_id)
             self.refresh()
         elif chosen == act_plan:
-            from datetime import datetime
-
             from ...models import weekly
 
-            today = datetime.now().strftime("%Y-%m-%d")
-            weekly.convert_experiment_to_plan(exp_id, today)
+            weekly.convert_experiment_to_plan(exp_id)
             self.refresh()
         elif chosen == act_view:
             self.open_experiment.emit(exp_id)
