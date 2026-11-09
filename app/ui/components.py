@@ -178,12 +178,15 @@ def badge_cell(text: str, color_key: str) -> QWidget:
 class ReminderPopup(QFrame):
     """右上角非模态提醒弹窗。"""
 
-    def __init__(self, message: str, title: str, on_view=None, on_confirm=None, auto_close: bool = True):
+    def __init__(self, message: str, title: str, on_view=None, on_confirm=None,
+                 auto_close: bool = True, exp_id: int | None = None, kind: str = ""):
         super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setObjectName("card")
         self.setFixedWidth(320)
         self._on_view = on_view
         self._on_confirm = on_confirm
+        self.exp_id = exp_id
+        self.kind = kind
 
         eff = QGraphicsDropShadowEffect(self)
         eff.setBlurRadius(24)
@@ -225,16 +228,20 @@ class ReminderPopup(QFrame):
             QTimer.singleShot(15_000, self.close)
 
     def _confirm_and_close(self) -> None:
-        if self._on_confirm is not None:
-            self._on_confirm()
-        self.close()
+        try:
+            if self._on_confirm is not None:
+                self._on_confirm()
+        finally:
+            self.close()
 
     def _view(self) -> None:
-        if self._on_confirm is not None:
-            self._on_confirm()
-        if self._on_view is not None:
-            self._on_view()
-        self.close()
+        try:
+            if self._on_confirm is not None:
+                self._on_confirm()
+            if self._on_view is not None:
+                self._on_view()
+        finally:
+            self.close()
 
     def show_top_right(self) -> None:
         """从主屏右上角滑入显示。"""

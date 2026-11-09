@@ -28,7 +28,7 @@ Python 3.11+ · PySide6 (Qt6) · SQLite (WAL) · python-markdown · python-docx 
 
 **不用装 Python、不用任何环境**，下载即用：
 
-1. 到 [Releases](https://github.com/ZhangPC-MoonBird/lablog/releases) 下载最新发布包（如 `LabLog_v2.1.0.zip`）
+1. 到 [Releases](https://github.com/ZhangPC-MoonBird/lablog/releases) 下载最新发布包（如 `LabLog_v2.1.1.zip`）
 2. 解压到任意位置（如 D 盘）
 3. 双击 `实验助手.exe` 即可运行
 

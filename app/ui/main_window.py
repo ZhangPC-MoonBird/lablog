@@ -493,19 +493,47 @@ class MainWindow(QMainWindow):
             )
         self._popups = [p for p in self._popups if p.isVisible()]
 
+        # 到点提醒每 5 秒重复触发一次；同一实验同一类型只保留一个弹窗，
+        # 避免多个相同弹窗叠在一起，点“知道了”只关掉最上面那个。
+        same = [
+            p for p in self._popups
+            if getattr(p, "exp_id", None) == evt["experiment_id"]
+            and getattr(p, "kind", "") == evt["kind"]
+        ]
+        if same:
+            first = same[0]
+            for extra in same[1:]:
+                extra.close()
+                self._popups.remove(extra)
+            first.raise_()
+            return
+
         def _confirm() -> None:
             # 用户点了“知道了/查看详情”，确认后停止到点提醒的重复响铃
             if evt["kind"] == "on_time":
                 self.reminder.mark_confirmed(evt["experiment_id"], evt["kind"])
+            self._close_popups(evt["experiment_id"], evt["kind"])
 
         popup = ReminderPopup(
             evt["message"], evt["title"],
             on_view=lambda: self.open_experiment(evt["experiment_id"]),
             on_confirm=_confirm,
             auto_close=(evt["kind"] != "on_time"),
+            exp_id=evt["experiment_id"],
+            kind=evt["kind"],
         )
         self._popups.append(popup)
         popup.show_top_right()
+
+    def _close_popups(self, exp_id: int, kind: str) -> None:
+        """关闭某实验某类型的全部提醒弹窗（含历史重复弹窗）。"""
+        keep = []
+        for popup in self._popups:
+            if getattr(popup, "exp_id", None) == exp_id and getattr(popup, "kind", "") == kind:
+                popup.close()
+            else:
+                keep.append(popup)
+        self._popups = keep
 
     # ------------------------------------------------------------------ 时钟 / 跨日
 

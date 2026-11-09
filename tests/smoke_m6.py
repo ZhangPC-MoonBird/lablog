@@ -25,7 +25,8 @@ except Exception:
     pass
 
 from PySide6.QtCore import QDate, QTime, QTimer
-from PySide6.QtWidgets import QApplication
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QPushButton
 
 from app import config
 from app.database import init_db
@@ -227,6 +228,34 @@ def main() -> int:
     win.switch_page("overview")
     check("总览页切换无异常", True)
     check("总览页有实验结果", len(win._pages["overview"]._exps) >= 2)
+
+    # 到点提醒重复触发时不叠弹窗，点“知道了”后全部关闭
+    import app.ui.main_window as mw_mod
+
+    original_play = mw_mod.sound_gen.play
+    mw_mod.sound_gen.play = lambda: None
+    evt = {
+        "experiment_id": exp_id, "title": "提醒弹窗测试", "kind": "on_time",
+        "message": "到点提醒", "planned_start": "2026-11-09 10:00",
+    }
+    win._on_reminder(evt)
+    win._on_reminder(evt)
+    QTest.qWait(100)
+    visible_popups = [p for p in win._popups if p.isVisible()]
+    check("同一到点提醒只弹一个窗", len(visible_popups) == 1, str(len(visible_popups)))
+    btn = None
+    if visible_popups:
+        btn = next(
+            (b for b in visible_popups[0].findChildren(QPushButton) if b.text() == "知道了"),
+            None,
+        )
+    check("提醒弹窗有知道了按钮", btn is not None)
+    if btn is not None:
+        btn.click()
+    QTest.qWait(50)
+    check("点击知道了后弹窗全部关闭",
+          not any(p.isVisible() for p in win._popups))
+    mw_mod.sound_gen.play = original_play
 
     dlg = ExperimentEditDialog(exp_id)
     check("实验编辑框载入跟随实验", len(dlg.form.followup_editor._rows) == 2)
