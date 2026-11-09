@@ -422,11 +422,16 @@ class ExperimentDetailPage(QWidget):
         self._build_ui()
 
     def _build_ui(self) -> None:
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(28, 20, 28, 24)
-        outer.setSpacing(14)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        # 顶栏：返回 + 标题 + 徽章 + 编辑/删除
+        # 顶栏固定：返回 + 标题 + 徽章 + 编辑/删除
+        top_host = QWidget()
+        top_outer = QVBoxLayout(top_host)
+        top_outer.setContentsMargins(28, 20, 28, 8)
+        top_outer.setSpacing(0)
+
         top = QHBoxLayout()
         top.setSpacing(10)
         self.back_btn = QPushButton("← 返回")
@@ -452,7 +457,20 @@ class ExperimentDetailPage(QWidget):
         top.addStretch()
         top.addWidget(self.edit_btn)
         top.addWidget(self.del_btn)
-        outer.addLayout(top)
+        top_outer.addLayout(top)
+        root.addWidget(top_host)
+
+        # 内容区整体滚动，避免窗口较小时信息卡/跟随卡/记录区互相挤压
+        self.page_scroll = QScrollArea()
+        self.page_scroll.setWidgetResizable(True)
+        self.page_scroll.setFrameShape(QScrollArea.NoFrame)
+        self.page_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.body = QWidget()
+        outer = QVBoxLayout(self.body)
+        outer.setContentsMargins(28, 8, 28, 24)
+        outer.setSpacing(14)
+        self.page_scroll.setWidget(self.body)
+        root.addWidget(self.page_scroll, 1)
 
         # 信息区
         info_row = QHBoxLayout()
@@ -561,6 +579,7 @@ class ExperimentDetailPage(QWidget):
 
         # 记录时间线卡片
         records_card = Card()
+        records_card.setMinimumHeight(380)
         rc = QVBoxLayout(records_card)
         rc.setContentsMargins(20, 16, 20, 16)
         rc.setSpacing(10)
@@ -583,6 +602,7 @@ class ExperimentDetailPage(QWidget):
         self.timeline_scroll = QScrollArea()
         self.timeline_scroll.setWidgetResizable(True)
         self.timeline_scroll.setFrameShape(QScrollArea.NoFrame)
+        self.timeline_scroll.setMinimumHeight(220)
         self.timeline_container = QWidget()
         self.timeline_layout = QVBoxLayout(self.timeline_container)
         self.timeline_layout.setContentsMargins(0, 0, 0, 0)
@@ -789,6 +809,8 @@ class ExperimentDetailPage(QWidget):
 
     def load(self, exp_id: int) -> None:
         self.exp_id = exp_id
+        if hasattr(self, "page_scroll"):
+            self.page_scroll.verticalScrollBar().setValue(0)
         exp = experiment.get(exp_id)
         if exp is None:
             self.title_label.setText("（实验不存在或已删除）")
