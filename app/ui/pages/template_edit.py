@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 from ... import config
 from ...models import experiment
 from ...models import template
-from ..components import make_expand_button
+from ..components import make_expand_button, make_view_button
 from .experiment_form import FollowupEditor
 
 
@@ -183,6 +183,7 @@ class TemplateEditDialog(QDialog):
         v.setSpacing(2)
         row = QHBoxLayout()
         row.addStretch()
+        row.addWidget(make_view_button(lambda e=edit: e.toPlainText(), title))
         row.addWidget(make_expand_button(edit, title))
         v.addLayout(row)
         v.addWidget(edit)

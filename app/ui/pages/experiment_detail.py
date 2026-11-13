@@ -39,6 +39,7 @@ from ..components import (
     badge,
     extract_markdown_images,
     make_expand_button,
+    make_view_button,
 )
 
 class _RecordCard(Card):
@@ -63,6 +64,10 @@ class _RecordCard(Card):
         del_btn.clicked.connect(lambda: on_delete(rec["id"]))
         header.addWidget(time_lbl)
         header.addStretch()
+        if (rec.get("content") or "").strip():
+            view_btn = make_view_button(rec["content"], "实验记录", markdown=True)
+            view_btn.setToolTip("展开查看这条记录")
+            header.addWidget(view_btn)
         header.addWidget(edit_btn)
         header.addWidget(del_btn)
         lay.addLayout(header)
@@ -108,6 +113,8 @@ class _AddRecordPanel(QWidget):
         self.time_edit.setCalendarPopup(True)
         time_row.addWidget(self.time_edit)
         time_row.addStretch()
+        time_row.addWidget(make_view_button(
+            lambda: self.body_edit.toPlainText(), "记录内容", markdown=True))
         time_row.addWidget(make_expand_button(self.body_edit, "记录内容"))
         lay.addLayout(time_row)
         lay.addWidget(self.body_edit)
@@ -300,6 +307,8 @@ class _RecordEditDialog(QDialog):
         self.time_edit.setDateTime(self._parse_time(rec.get("record_time") or ""))
         time_row.addWidget(self.time_edit)
         time_row.addStretch()
+        time_row.addWidget(make_view_button(
+            lambda: self.body_edit.toPlainText(), "记录内容", markdown=True))
         time_row.addWidget(make_expand_button(self.body_edit, "记录内容"))
         root.addLayout(time_row)
         root.addWidget(self.body_edit)
@@ -485,7 +494,14 @@ class ExperimentDetailPage(QWidget):
         self.steps_label = QLabel()
         self.steps_label.setWordWrap(True)
         self.steps_label.setObjectName("muted")
-        left.addWidget(QLabel("目标 / 步骤"))
+        info_head = QHBoxLayout()
+        info_head.addWidget(QLabel("目标 / 步骤"))
+        info_head.addStretch()
+        info_head.addWidget(make_view_button(
+            lambda: f"目标：\n{self.goal_label.text()}\n\n步骤：\n{self.steps_label.text()}",
+            "实验目标 / 步骤",
+        ))
+        left.addLayout(info_head)
         left.addWidget(self.goal_label)
         left.addWidget(self.steps_label)
         left.addStretch()
@@ -568,6 +584,8 @@ class ExperimentDetailPage(QWidget):
         chead.addWidget(cl)
         chead.addStretch()
         chead.addWidget(self.conclusion_save_label)
+        chead.addWidget(make_view_button(
+            lambda: self.conclusion_edit.toPlainText(), "实验结论", markdown=True))
         chead.addWidget(expand_btn)
         chead.addWidget(concl_img_btn)
         chead.addWidget(concl_save_btn)
@@ -774,6 +792,18 @@ class ExperimentDetailPage(QWidget):
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(6)
+
+        def _followup_text() -> str:
+            parts = []
+            if (fu.get("goal") or "").strip():
+                parts.append(f"目标：\n{fu['goal'].strip()}")
+            if (fu.get("steps") or "").strip():
+                parts.append(f"步骤：\n{fu['steps'].strip()}")
+            if (fu.get("notes") or "").strip():
+                parts.append(f"备注：\n{fu['notes'].strip()}")
+            return "\n\n".join(parts)
+
+        view_btn = make_view_button(_followup_text, fu["title"])
         open_btn = QPushButton("记录/结论")
         open_btn.setCursor(Qt.PointingHandCursor)
         open_btn.setToolTip("打开这个跟随实验，写实验记录和结论")
@@ -788,6 +818,7 @@ class ExperimentDetailPage(QWidget):
             plan_btn.clicked.connect(
                 lambda _=False, eid=fu["id"]: self._convert_followup(eid))
         btn_row.addStretch()
+        btn_row.addWidget(view_btn)
         btn_row.addWidget(open_btn)
         btn_row.addWidget(plan_btn)
         lay.addLayout(btn_row)

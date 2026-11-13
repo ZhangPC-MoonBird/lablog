@@ -247,6 +247,8 @@ QRadioButton::indicator:hover { border-color: __PRIMARY__; }
 QRadioButton::indicator:checked { background: __PRIMARY__; border-color: __PRIMARY__; }
 
 QToolTip { background: __CARD__; color: __TEXT__; border: 1px solid __BORDER__; padding: 4px 8px; }
+QTextBrowser#textView { background: __CARD__; color: __TEXT__; border: 1px solid __BORDER__;
+                        border-radius: 8px; padding: 10px; }
 """
 
 

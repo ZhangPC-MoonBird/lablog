@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QPlainTextEdit,
     QPushButton,
+    QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
@@ -506,6 +507,54 @@ def make_expand_button(edit, title: str) -> QPushButton:
             edit.setPlainText(dlg.text())
 
     btn.clicked.connect(_expand)
+    return btn
+
+
+class TextViewDialog(QDialog):
+    """只读展开查看：Markdown 渲染 + 图片内联，不修改原内容。"""
+
+    def __init__(self, title: str, text: str, markdown: bool = False, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.resize(820, 640)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(16, 14, 16, 16)
+        lay.setSpacing(10)
+
+        browser = QTextBrowser()
+        browser.setObjectName("textView")
+        browser.setOpenExternalLinks(True)
+        if (text or "").strip():
+            if markdown:
+                from ..utils import markdown_utils
+
+                browser.setHtml(markdown_utils.to_html(text))
+            else:
+                browser.setPlainText(text)
+        else:
+            browser.setPlainText("（无内容）")
+        lay.addWidget(browser, 1)
+
+        row = QHBoxLayout()
+        row.addStretch()
+        close_btn = QPushButton("关闭")
+        close_btn.setCursor(Qt.PointingHandCursor)
+        close_btn.clicked.connect(self.accept)
+        row.addWidget(close_btn)
+        lay.addLayout(row)
+
+
+def make_view_button(get_text, title: str, markdown: bool = False) -> QPushButton:
+    """生成“查看”按钮：只读展开完整内容（不进入编辑）。"""
+    btn = QPushButton("⤢ 查看")
+    btn.setCursor(Qt.PointingHandCursor)
+    btn.setToolTip("展开查看完整内容")
+
+    def _view() -> None:
+        text = get_text() if callable(get_text) else get_text
+        TextViewDialog(title, text or "", markdown=markdown, parent=btn.window()).exec()
+
+    btn.clicked.connect(_view)
     return btn
 
 

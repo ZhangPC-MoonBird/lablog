@@ -26,12 +26,13 @@ except Exception:
 
 from PySide6.QtCore import QDate, QTime, QTimer
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication, QPushButton, QTextBrowser
 
 from app import config
 from app.database import init_db
 from app.models import experiment, template, weekly
 from app.ui import theme
+from app.ui.components import TextViewDialog
 from app.ui.main_window import MainWindow
 from app.ui.pages.experiment_edit import ExperimentEditDialog
 from app.ui.pages.experiment_form import ExperimentCoreForm
@@ -265,6 +266,13 @@ def main() -> int:
     check("规划项实验模式", pdlg.mode_combo.currentData() == 1)
     check("规划项载入跟随实验", len(pdlg.exp_form.followup_editor._rows) == 2)
     pdlg.close()
+
+    view_dlg = TextViewDialog("查看测试", "**加粗** 内容", markdown=True)
+    browser = view_dlg.findChild(QTextBrowser)
+    check("只读查看对话框可构建", view_dlg.windowTitle() == "查看测试")
+    check("只读查看渲染 Markdown",
+          browser is not None and "加粗" in browser.toPlainText())
+    view_dlg.close()
 
     # ---- 9. 对话框真实保存 ----
     new_dlg = ExperimentEditDialog()

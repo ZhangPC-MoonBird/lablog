@@ -29,6 +29,7 @@ from ..components import (
     ImageTextEdit,
     badge,
     make_expand_button,
+    make_view_button,
 )
 
 _FIELDS = (("summary", "本周总结"), ("problems", "遇到的问题"), ("next_plan", "下周计划"))
@@ -160,11 +161,14 @@ class WeeklyReviewPage(QWidget):
             lbl = QLabel(caption)
             lbl.setObjectName("cardTitle")
             expand_btn = make_expand_button(edit, caption)
+            view_btn = make_view_button(
+                lambda e=edit: e.toPlainText(), caption, markdown=True)
             img_btn = QPushButton("插入图片")
             img_btn.setCursor(Qt.PointingHandCursor)
             img_btn.clicked.connect(lambda _=False, f=field: self._choose_image(f))
             head.addWidget(lbl)
             head.addStretch()
+            head.addWidget(view_btn)
             head.addWidget(expand_btn)
             head.addWidget(img_btn)
             col.addLayout(head)

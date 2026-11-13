@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
 from ...models import experiment
 from ...models import template
 from ...utils import time_utils
-from ..components import TypeManagerDialog, make_expand_button
+from ..components import TypeManagerDialog, make_expand_button, make_view_button
 
 
 def _duration_text(minutes: int) -> str:
@@ -199,7 +199,12 @@ class FollowupEditor(QWidget):
         v.addLayout(offset_row)
         v.addLayout(dur_row)
         v.addWidget(time_label)
-        v.addWidget(QLabel("步骤"))
+        steps_head = QHBoxLayout()
+        steps_head.addWidget(QLabel("步骤"))
+        steps_head.addStretch()
+        steps_head.addWidget(make_view_button(
+            lambda e=steps: e.toPlainText(), "跟随实验步骤"))
+        v.addLayout(steps_head)
         v.addWidget(steps)
         v.addWidget(notes)
 
@@ -560,6 +565,7 @@ class ExperimentCoreForm(QWidget):
         v.setSpacing(2)
         row = QHBoxLayout()
         row.addStretch()
+        row.addWidget(make_view_button(lambda e=edit: e.toPlainText(), title))
         row.addWidget(make_expand_button(edit, title))
         v.addLayout(row)
         v.addWidget(edit)
