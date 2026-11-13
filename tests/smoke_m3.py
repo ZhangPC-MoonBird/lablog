@@ -32,6 +32,7 @@ from app import config
 from app.database import fetch_one, init_db, set_setting
 from app.models import daily_log, experiment, record
 from app.ui import theme
+from app.ui.components import IMAGE_EXTS
 from app.ui.main_window import MainWindow
 from app.ui.pages.experiment_detail import ExperimentDetailPage
 from app.utils import image_utils, markdown_utils
@@ -72,6 +73,18 @@ def main() -> int:
     check("图片文件已落盘", saved.exists(), str(saved))
     check("压缩后最长边≤1920", max(sz.width(), sz.height()) <= 1920, f"{sz.width()}x{sz.height()}")
     check("缩略图加载", image_utils.load_pixmap(rel, 200) is not None)
+    check("TIFF 在拖拽白名单", ".tif" in IMAGE_EXTS and ".tiff" in IMAGE_EXTS)
+
+    # TIFF 插入：读取后统一压缩为 JPG
+    tiff_src = config.DATA_DIR / "source_test.tiff"
+    tiff_img = QImage(120, 80, QImage.Format_RGB32)
+    tiff_img.fill(QColor(20, 180, 90))
+    check("生成 TIFF 测试文件", tiff_img.save(str(tiff_src), "TIFF"))
+    tiff_rel = image_utils.save_image_file(tiff_src)
+    check("TIFF 可插入并转为 JPG",
+          tiff_rel is not None and tiff_rel.endswith(".jpg"), str(tiff_rel))
+    check("TIFF 转 JPG 已落盘",
+          bool(tiff_rel) and (config.DATA_DIR / tiff_rel).exists())
 
     # ---- 2. Markdown 渲染 ----
     html = markdown_utils.to_html("**加样**\n\n- 步骤一")

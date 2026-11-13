@@ -305,7 +305,7 @@ class EmptyState(QWidget):
             render_illustration("empty", theme.current()["subtext"], 150))
 
 
-IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp")
+IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tif", ".tiff")
 
 _IMG_PATH_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 
@@ -487,7 +487,7 @@ class TextExpandDialog(QDialog):
         from ..utils import image_utils
 
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "插入图片", "", "图片 (*.png *.jpg *.jpeg *.gif *.bmp *.webp)")
+            self, "插入图片", "", "图片 (*.png *.jpg *.jpeg *.gif *.bmp *.webp *.tif *.tiff)")
         for p in paths:
             rel = image_utils.save_image_file(p)
             if rel:

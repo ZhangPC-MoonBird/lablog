@@ -212,7 +212,7 @@ class WeeklyReviewPage(QWidget):
 
     def _choose_image(self, field: str) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "选择图片", "", "图片 (*.png *.jpg *.jpeg *.gif *.bmp *.webp)")
+            self, "选择图片", "", "图片 (*.png *.jpg *.jpeg *.gif *.bmp *.webp *.tif *.tiff)")
         for p in paths:
             self._add_image_file(field, p)
 

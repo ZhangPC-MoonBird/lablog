@@ -193,7 +193,7 @@ class _AddRecordPanel(QWidget):
 
     def _choose_files(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "选择图片", "", "图片 (*.png *.jpg *.jpeg *.gif *.bmp *.webp)"
+            self, "选择图片", "", "图片 (*.png *.jpg *.jpeg *.gif *.bmp *.webp *.tif *.tiff)"
         )
         for p in paths:
             self._add_image_file(p)
@@ -351,7 +351,7 @@ class _RecordEditDialog(QDialog):
 
     def _choose_files(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "选择图片", "", "图片 (*.png *.jpg *.jpeg *.gif *.bmp *.webp)"
+            self, "选择图片", "", "图片 (*.png *.jpg *.jpeg *.gif *.bmp *.webp *.tif *.tiff)"
         )
         for p in paths:
             self._add_image_file(p)
@@ -863,7 +863,7 @@ class ExperimentDetailPage(QWidget):
 
     def _choose_conclusion_image(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "选择图片", "", "图片 (*.png *.jpg *.jpeg *.gif *.bmp *.webp)"
+            self, "选择图片", "", "图片 (*.png *.jpg *.jpeg *.gif *.bmp *.webp *.tif *.tiff)"
         )
         for p in paths:
             self._add_conclusion_file(p)
